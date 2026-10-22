@@ -73,6 +73,14 @@ public enum class PayriffErrorCode {
 
     /** Payriff answered with a next step the SDK cannot run, and the order status was not final. */
     UNEXPECTED_RESPONSE,
+
+    /**
+     * The device looks rooted or tampered with, or a hooking framework is loaded, so the card payment was refused
+     * on it ([Payriff.isDeviceCompromised], CONTRACT §16.16). A check that cannot complete counts too: it fails closed.
+     * Never retryable and not fatal: the same order can be paid on another device. Set
+     * [PayriffConfig.allowCompromisedDevices] to allow it anyway, for development only.
+     */
+    DEVICE_COMPROMISED,
 }
 
 /** A field of [PayriffCardForm]. */

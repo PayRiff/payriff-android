@@ -36,14 +36,18 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.File
 import java.math.BigDecimal
+import java.util.zip.Inflater
+import kotlin.math.abs
 
 /**
- * CONTRACT §16.14, `PayriffPaymentView`: its parts top to bottom, the Pay button's title and states, the error line, the
- * results it reports (with the real `Payriff.retrieveOrder` over a fake Client API), the "Powered by" split, its images
- * and the lock it draws in code.
+ * CONTRACT §16.14, `PayriffPaymentView`: its parts top to bottom, the Pay button's title and states, the style's text
+ * overrides and merged button text style, the error line, the results it reports (with the real `Payriff.retrieveOrder`
+ * over a fake Client API), the "Powered by" split, its images (the dark-theme logo included) and the lock it draws in
+ * code.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class PaymentViewTest {
@@ -108,13 +112,21 @@ class PaymentViewTest {
             assertNull(backgroundColor)
             assertEquals(20f, padding, 0f)
             assertNull(buttonColor)
-            assertEquals(PayriffTextStyle(size = 16f, weight = PayriffTextStyle.SEMIBOLD), buttonTextStyle)
+            // Nothing set: the button's title keeps every default.
+            assertEquals(PayriffTextStyle(), buttonTextStyle)
             assertEquals(listOf(44f, 16f), listOf(buttonHeight, buttonCornerRadius))
+            assertEquals(listOf<String?>(null, null), listOf(payButtonLabel, secureNoteText))
             assertNull(secondaryTextColor)
             assertEquals(listOf(true, true, true), listOf(showBadges, showSecureNote, showPoweredBy))
             assertEquals(PayriffCardFormStyle(), formStyle)
             assertTrue(formStyle.showLabels)
         }
+        // The Pay button's title: 16 sp semibold, white.
+        val title = PaymentViewPlan.buttonText(PayriffPaymentViewStyle())
+        assertEquals(16f, title.size, 0f)
+        assertEquals(600, title.weight)
+        assertEquals(0xFFFFFFFF.toInt(), title.color)
+        assertNull(title.typeface)
         assertEquals(0xFFFCFCFD.toInt(), PaymentViewPlan.BACKGROUND_LIGHT)
         assertEquals(0xFF222224.toInt(), PaymentViewPlan.BACKGROUND_DARK)
         assertEquals(0xFF4DBDC6.toInt(), PaymentViewPlan.BUTTON_COLOR)
@@ -122,6 +134,58 @@ class PaymentViewTest {
         assertEquals(0xFF76787F.toInt(), PaymentViewPlan.SECONDARY_TEXT_COLOR)
         assertEquals(12f, PaymentViewPlan.SECONDARY_TEXT_SIZE_SP, 0f)
         assertEquals(listOf(0.5f, 0.8f), listOf(PaymentViewPlan.DISABLED_ALPHA, PaymentViewPlan.PRESSED_ALPHA))
+    }
+
+    @Test
+    fun theButtonTextStyleIsMergedOverTheDefault() {
+        val brand = 0xFF0B57D0.toInt()
+        val white = 0xFFFFFFFF.toInt()
+
+        /** The title's size, weight and colour with [text] as the style's buttonTextStyle. */
+        fun title(text: PayriffTextStyle): Triple<Float, Int, Int> =
+            PaymentViewPlan.buttonText(PayriffPaymentViewStyle(buttonTextStyle = text)).let { Triple(it.size, it.weight, it.color) }
+
+        // A colour alone keeps 16 sp semibold.
+        assertEquals(Triple(16f, 600, brand), title(PayriffTextStyle(color = brand)))
+        // A size alone keeps the weight and the white colour; a weight alone keeps the size.
+        assertEquals(Triple(18f, 600, white), title(PayriffTextStyle(size = 18f)))
+        assertEquals(Triple(16f, 700, white), title(PayriffTextStyle(weight = PayriffTextStyle.BOLD)))
+        // Everything set: nothing of the default is left.
+        assertEquals(Triple(15f, 500, brand), title(PayriffTextStyle(size = 15f, weight = PayriffTextStyle.MEDIUM, color = brand)))
+        // A size that is not a number keeps the default; one below 1 sp counts as 1 sp.
+        assertEquals(Triple(16f, 600, white), title(PayriffTextStyle(size = Float.NaN)))
+        assertEquals(Triple(1f, 600, white), title(PayriffTextStyle(size = 0f)))
+    }
+
+    @Test
+    fun theStyleCanReplaceThePayWordAndTheSecureText() {
+        // CONTRACT §16.14 "Text overrides": the label replaces view.pay; the amount and currency still follow it.
+        val order = order(amount = "1.02", currency = "AZN")
+        assertEquals("Pay now 1.02 AZN", PaymentViewPlan.payTitle(PayriffLanguage.EN, order, "Pay now"))
+        // The same label in every language, and alone while the amount is unknown.
+        assertEquals("Pay now 1.02 AZN", PaymentViewPlan.payTitle(PayriffLanguage.RU, order, "Pay now"))
+        assertEquals("Pay now", PaymentViewPlan.payTitle(PayriffLanguage.AZ, null, "Pay now"))
+        assertEquals("Pay now", PaymentViewPlan.payTitle(PayriffLanguage.EN, order(amount = null), "Pay now"))
+        assertEquals("Davam et 3.00", PaymentViewPlan.payTitle(PayriffLanguage.EN, order(amount = "3", currency = null), " Davam et "))
+        // null or blank keeps the localized word.
+        assertEquals("Ödə 1.02 AZN", PaymentViewPlan.payTitle(PayriffLanguage.AZ, order, null))
+        assertEquals("Pay 1.02 AZN", PaymentViewPlan.payTitle(PayriffLanguage.EN, order, "  "))
+        assertEquals("Оплатить", PaymentViewPlan.payTitle(PayriffLanguage.RU, null, ""))
+
+        val state = PaymentViewState()
+        assertEquals("Pay now", state.payTitle(PayriffLanguage.EN, "Pay now"))
+        state.orderDidLoad(order)
+        assertEquals("Pay now 1.02 AZN", state.payTitle(PayriffLanguage.EN, "Pay now"))
+        assertEquals("Pay 1.02 AZN", state.payTitle(PayriffLanguage.EN))
+
+        // secureNoteText replaces view.secure, as it is, in every language.
+        val own = PayriffPaymentViewStyle(secureNoteText = "Card data is encrypted on this device")
+        for (language in PayriffLanguage.entries) {
+            assertEquals("Card data is encrypted on this device", PaymentViewPlan.secureText(language, own))
+            assertEquals(CardStrings.view(language, CardStrings.VIEW_SECURE), PaymentViewPlan.secureText(language, PayriffPaymentViewStyle()))
+            assertEquals(CardStrings.view(language, CardStrings.VIEW_SECURE), PaymentViewPlan.secureText(language, PayriffPaymentViewStyle(secureNoteText = " ")))
+        }
+        assertEquals("Proceed securely by PCI DSS", PaymentViewPlan.secureText(PayriffLanguage.EN, PayriffPaymentViewStyle()))
     }
 
     @Test
@@ -134,9 +198,11 @@ class PaymentViewTest {
             .buttonTextStyle(PayriffTextStyle(size = 17f, weight = PayriffTextStyle.BOLD))
             .buttonHeight(52f)
             .buttonCornerRadius(28f)
+            .payButtonLabel("Pay now")
             .secondaryTextColor(0xFF555555.toInt())
             .showBadges(false)
             .showSecureNote(false)
+            .secureNoteText("Secure payment")
             .showPoweredBy(false)
             .formStyle(formStyle)
             .build()
@@ -147,9 +213,11 @@ class PaymentViewTest {
             buttonTextStyle = PayriffTextStyle(size = 17f, weight = 700),
             buttonHeight = 52f,
             buttonCornerRadius = 28f,
+            payButtonLabel = "Pay now",
             secondaryTextColor = 0xFF555555.toInt(),
             showBadges = false,
             showSecureNote = false,
+            secureNoteText = "Secure payment",
             showPoweredBy = false,
             formStyle = formStyle,
         )
@@ -212,12 +280,10 @@ class PaymentViewTest {
     @Test
     fun theImagesAreDrawablesInFourDensitiesAtTheirSizes() {
         val drawables = Class.forName("com.payriff.android.R\$drawable")
-        val res = listOf(File("src/main/res"), File("payriff/src/main/res")).first { it.isDirectory }
         for (asset in PaymentViewAsset.entries) {
             assertEquals(asset.name, drawables.getField(asset.resourceName).getInt(null), asset.resId)
-            val densities = listOf("drawable-mdpi" to 1.0, "drawable-hdpi" to 1.5, "drawable-xhdpi" to 2.0, "drawable-xxhdpi" to 3.0)
-            for ((folder, scale) in densities) {
-                val png = File(res, "$folder/${asset.resourceName}.png")
+            for ((folder, scale) in DENSITIES) {
+                val png = File(res(), "$folder/${asset.resourceName}.png")
                 assertTrue("missing $png", png.isFile)
                 val (width, height) = pngSize(png)
                 // hdpi sizes are rounded to whole pixels.
@@ -228,6 +294,115 @@ class PaymentViewTest {
         assertEquals(listOf(43 to 28, 42 to 28), PaymentViewAsset.BADGES.map { it.widthDp to it.heightDp })
         assertEquals(listOf("Mastercard", "Visa"), PaymentViewAsset.BADGES.map { it.accessibilityLabel })
         assertEquals(82 to 16, PaymentViewAsset.LOGO.widthDp to PaymentViewAsset.LOGO.heightDp)
+    }
+
+    @Test
+    fun theFooterShowsTheDarkLogoInTheDarkTheme() {
+        // CONTRACT §16.14: payriff-logo in the light theme, payriff-logo-dark in the dark one, at the same 82×16.
+        assertSame(PaymentViewAsset.LOGO, PaymentViewAsset.logo(night = false))
+        assertSame(PaymentViewAsset.LOGO_DARK, PaymentViewAsset.logo(night = true))
+        for (logo in listOf(PaymentViewAsset.LOGO, PaymentViewAsset.LOGO_DARK)) {
+            assertEquals(82 to 16, logo.widthDp to logo.heightDp)
+            assertEquals("Payriff", logo.accessibilityLabel)
+            assertFalse("a logo is not a badge", logo in PaymentViewAsset.BADGES)
+        }
+        assertEquals("payriff_logo_dark", PaymentViewAsset.LOGO_DARK.resourceName)
+    }
+
+    @Test
+    fun theDarkLogoIsTheLogoWithItsWordmarkInE1E4E8() {
+        // Every density: the same pixels and transparency as the light logo, except the wordmark ("payriff", right of
+        // the mark), which is #E1E4E8 instead of #005687. The teal mark stays. Faint edge pixels are left out.
+        for ((folder, _) in DENSITIES) {
+            val light = rgbaPixels(File(res(), "$folder/payriff_logo.png"))
+            val dark = rgbaPixels(File(res(), "$folder/payriff_logo_dark.png"))
+            assertEquals(folder, light.width to light.height, dark.width to dark.height)
+            var wordmark = 0
+            for (y in 0 until light.height) {
+                for (x in 0 until light.width) {
+                    val before = light.argb[y * light.width + x]
+                    val after = dark.argb[y * light.width + x]
+                    assertEquals("$folder ($x, $y) alpha", before ushr 24, after ushr 24)
+                    if (before ushr 24 < VISIBLE_ALPHA) continue
+                    if (x * 3 < light.width) {
+                        assertEquals("$folder ($x, $y): the mark is unchanged", before, after)
+                    } else {
+                        assertEquals("$folder ($x, $y): the wordmark is #E1E4E8", 0xE1E4E8, after and 0xFFFFFF)
+                        wordmark++
+                    }
+                }
+            }
+            assertTrue("$folder has a wordmark", wordmark > 0)
+        }
+    }
+
+    private fun res(): File = listOf(File("src/main/res"), File("payriff/src/main/res")).first { it.isDirectory }
+
+    private class Pixels(val width: Int, val height: Int, val argb: IntArray)
+
+    /** The pixels of an 8-bit RGBA, non-interlaced PNG (how every image of the view is stored), as ARGB. */
+    private fun rgbaPixels(file: File): Pixels {
+        val input = DataInputStream(file.inputStream().buffered())
+        val compressed = ByteArrayOutputStream()
+        var width = 0
+        var height = 0
+        input.use {
+            input.skipBytes(8)
+            while (true) {
+                val length = input.readInt()
+                val type = String(ByteArray(4).also(input::readFully), Charsets.US_ASCII)
+                val data = ByteArray(length).also(input::readFully)
+                input.readInt() // CRC
+                when (type) {
+                    "IHDR" -> {
+                        val header = DataInputStream(data.inputStream())
+                        width = header.readInt()
+                        height = header.readInt()
+                        // Bit depth 8, colour type 6 (RGBA), compression 0, filter 0, no interlacing.
+                        assertEquals("$file", listOf(8, 6, 0, 0, 0), List(5) { header.readUnsignedByte() })
+                    }
+                    "IDAT" -> compressed.write(data)
+                    "IEND" -> break
+                }
+            }
+        }
+        val stride = width * 4
+        val raw = ByteArray(height * (stride + 1))
+        Inflater().run {
+            setInput(compressed.toByteArray())
+            var read = 0
+            while (read < raw.size && !finished()) read += inflate(raw, read, raw.size - read)
+            end()
+        }
+        // Undo each row's filter (PNG specification, section 9): 0 none, 1 sub, 2 up, 3 average, 4 Paeth.
+        val pixels = ByteArray(height * stride)
+        for (y in 0 until height) {
+            val filter = raw[y * (stride + 1)].toInt()
+            for (i in 0 until stride) {
+                val value = raw[y * (stride + 1) + 1 + i].toInt() and 0xFF
+                val left = if (i >= 4) pixels[y * stride + i - 4].toInt() and 0xFF else 0
+                val up = if (y > 0) pixels[(y - 1) * stride + i].toInt() and 0xFF else 0
+                val upLeft = if (y > 0 && i >= 4) pixels[(y - 1) * stride + i - 4].toInt() and 0xFF else 0
+                val predicted = when (filter) {
+                    0 -> 0
+                    1 -> left
+                    2 -> up
+                    3 -> (left + up) / 2
+                    4 -> {
+                        val p = left + up - upLeft
+                        val (pa, pb, pc) = Triple(abs(p - left), abs(p - up), abs(p - upLeft))
+                        if (pa <= pb && pa <= pc) left else if (pb <= pc) up else upLeft
+                    }
+                    else -> throw AssertionError("$file: unknown PNG filter $filter")
+                }
+                pixels[y * stride + i] = (value + predicted).toByte()
+            }
+        }
+        val argb = IntArray(width * height) { index ->
+            val (r, g, b, a) = List(4) { pixels[index * 4 + it].toInt() and 0xFF }
+            (a shl 24) or (r shl 16) or (g shl 8) or b
+        }
+        return Pixels(width, height, argb)
     }
 
     /** Width and height from a PNG's IHDR chunk. */
@@ -271,8 +446,7 @@ class PaymentViewTest {
         // No image of a lock ships with the SDK.
         val drawables = Class.forName("com.payriff.android.R\$drawable")
         assertTrue(drawables.fields.none { it.name.startsWith("payriff_") && "lock" in it.name })
-        val res = listOf(File("src/main/res"), File("payriff/src/main/res")).first { it.isDirectory }
-        assertTrue(res.walk().none { "lock" in it.name })
+        assertTrue(res().walk().none { "lock" in it.name })
     }
 
     // endregion
@@ -626,4 +800,12 @@ class PaymentViewTest {
         currency = "AZN",
         transactionId = null,
     )
+
+    private companion object {
+        /** The drawable folders and their scale: 1x, 1.5x, 2x and 3x. */
+        val DENSITIES = listOf("drawable-mdpi" to 1.0, "drawable-hdpi" to 1.5, "drawable-xhdpi" to 2.0, "drawable-xxhdpi" to 3.0)
+
+        /** Pixels fainter than this are anti-aliasing noise at the edges of the logo. */
+        const val VISIBLE_ALPHA = 16
+    }
 }

@@ -55,8 +55,15 @@ internal class PaymentViewState {
     var endedBy: PayriffError? = null
         private set
 
+    /** Set when the device failed the integrity check (CONTRACT §16.16): the error line shows it and Pay stays off. */
+    var deviceBlock: PayriffError? = null
+        private set
+
     /** Whether a fatal error was already reported through the result listener; it is reported once. */
     private var fatalReported = false
+
+    /** Whether the device block was already reported through the result listener; it is reported once per order. */
+    private var deviceBlockReported = false
 
     /** The order once loaded, payable or not. */
     val loadedOrder: PayriffClientOrder?
@@ -66,15 +73,18 @@ internal class PaymentViewState {
             else -> null
         }
 
-    /** The Pay button's title in [language]: "Pay 1.02 AZN" once the order is loaded, "Pay" before. */
-    fun payTitle(language: PayriffLanguage): String = PaymentViewPlan.payTitle(language, loadedOrder)
+    /**
+     * The Pay button's title in [language]: "Pay 1.02 AZN" once the order is loaded, "Pay" before. The style's [label]
+     * replaces the word "Pay" when it is set.
+     */
+    fun payTitle(language: PayriffLanguage, label: String? = null): String = PaymentViewPlan.payTitle(language, loadedOrder, label)
 
     /**
      * Whether Pay can be tapped: the order is payable and not paid from this view yet, every field is valid and no
      * payment runs. Otherwise the button is dimmed to 50%.
      */
     val isPayEnabled: Boolean
-        get() = order is Order.Payable && !isFinished && endedBy == null && isFormComplete && !isPaying && !isFormProcessing
+        get() = deviceBlock == null && order is Order.Payable && !isFinished && endedBy == null && isFormComplete && !isPaying && !isFormProcessing
 
     /** Whether a spinner replaces the Pay button's title. */
     val isBusy: Boolean
@@ -85,6 +95,8 @@ internal class PaymentViewState {
      * or "This order cannot be paid by card" (`view.notPayable`); `null` while the order loads or can be paid.
      */
     fun errorMessage(language: PayriffLanguage): String? {
+        // The device block takes precedence: it is shown while the order never loads (CONTRACT §16.16).
+        if (deviceBlock != null) return PaymentViewPlan.deviceNotSupportedMessage(language)
         endedBy?.let { return messageOf(it, language) }
         return when (val current = order) {
             is Order.NotPayable -> PaymentViewPlan.notPayableMessage(language)
@@ -110,6 +122,24 @@ internal class PaymentViewState {
         isFinished = false
         endedBy = null
         fatalReported = false
+        deviceBlock = null
+        deviceBlockReported = false
+    }
+
+    /**
+     * The device failed the integrity check (CONTRACT §16.16). Returns the failure to report through the result
+     * listener, only the first time per order; afterwards the view only keeps showing the message.
+     */
+    fun deviceDidBlock(error: PayriffError): PayriffResult? {
+        deviceBlock = error
+        if (deviceBlockReported) return null
+        deviceBlockReported = true
+        return PayriffResult.Failed(error)
+    }
+
+    /** The device passed the integrity check: clears a block left from a previous check. */
+    fun deviceDidPass() {
+        deviceBlock = null
     }
 
     /** A load starts. */
@@ -168,6 +198,7 @@ internal class PaymentViewController(
     private val loadOrder: suspend (orderId: String, clientSecret: String) -> PayriffClientOrder,
     private val onStateChanged: () -> Unit,
     private val deliver: (PayriffResult) -> Unit,
+    private val deviceBlock: () -> PayriffError? = { null },
 ) {
     val state = PaymentViewState()
 
@@ -193,9 +224,22 @@ internal class PaymentViewController(
         if (onScreen) load()
     }
 
-    /** The view is on screen: loads the order when it needs one ([PaymentViewState.needsOrder]). */
+    /**
+     * The view is on screen. First the device-integrity check (CONTRACT §16.16): a block shows the message, keeps Pay
+     * disabled, skips the order load and reports the failure once. Otherwise it loads the order when it needs one
+     * ([PaymentViewState.needsOrder]).
+     */
     fun appear() {
         onScreen = true
+        val blocked = deviceBlock()
+        if (blocked != null) {
+            cancelLoad()
+            val report = state.deviceDidBlock(blocked)
+            onStateChanged()
+            report?.let(deliver)
+            return
+        }
+        state.deviceDidPass()
         if (state.needsOrder && loadJob?.isActive != true) load()
     }
 

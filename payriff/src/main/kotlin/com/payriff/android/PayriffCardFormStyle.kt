@@ -16,17 +16,19 @@ public enum class PayriffCardFormLayout {
 }
 
 /**
- * A text style of [PayriffCardFormStyle].
+ * A text style of [PayriffCardFormStyle] and [PayriffPaymentViewStyle]. It is merged over the default of the text it
+ * styles: every property is optional, and one you leave out (`null`) keeps the default. For example
+ * `PayriffTextStyle(color = brandColor)` changes only the colour and keeps the default size and weight.
  *
- * @property size Text size in sp.
- * @property weight Font weight from 1 to 1000, such as [REGULAR], [MEDIUM], [SEMIBOLD] or [BOLD]. Android 9 and later
- *   draw any weight; older versions use regular, medium (system font only) or bold.
- * @property color Text colour; `null` uses the form's default for this text (see [PayriffCardFormStyle]).
- * @property typeface The font, for example one from your resources; `null` uses the system font.
+ * @property size Text size in sp; `null` keeps the default size.
+ * @property weight Font weight from 1 to 1000, such as [REGULAR], [MEDIUM], [SEMIBOLD] or [BOLD]; `null` keeps the
+ *   default weight. Android 9 and later draw any weight; older versions use regular, medium (system font only) or bold.
+ * @property color Text colour; `null` keeps the default colour of this text.
+ * @property typeface The font, for example one from your resources; `null` keeps the default, the system font.
  */
 public data class PayriffTextStyle @JvmOverloads constructor(
-    public val size: Float = 16f,
-    public val weight: Int = REGULAR,
+    public val size: Float? = null,
+    public val weight: Int? = null,
     @ColorInt public val color: Int? = null,
     public val typeface: Typeface? = null,
 ) {
@@ -54,19 +56,20 @@ public data class PayriffTextStyle @JvmOverloads constructor(
  * cardForm.style = PayriffCardFormStyle(
  *     cornerRadius = 16f,
  *     focusedBorderColor = brandColor,
- *     labelTextStyle = PayriffTextStyle(size = 13f, weight = PayriffTextStyle.BOLD),
+ *     labelTextStyle = PayriffTextStyle(size = 13f, weight = PayriffTextStyle.BOLD), // keeps the label colour
  * )
  * ```
  *
  * Sizes are in dp and text sizes in sp. Java uses [Builder].
  *
  * @property layout [PayriffCardFormLayout.GROUPED] (default) or [PayriffCardFormLayout.STACKED].
- * @property labelTextStyle The labels above the fields: 14 sp semibold in `#34363A` (`#E1E4E8` in the dark theme).
- * @property inputTextStyle What the customer types, and the placeholders' size: 14 sp regular in `#4D4F54` (`#8E8E93` in
- *   the dark theme).
+ * @property labelTextStyle The labels above the fields, merged over the default: 14 sp semibold in `#34363A` (`#E1E4E8`
+ *   in the dark theme). Set only what you want to change.
+ * @property inputTextStyle What the customer types, and the placeholders' size, merged over the default: 14 sp regular
+ *   in `#4D4F54` (`#8E8E93` in the dark theme).
  * @property placeholderColor The placeholders (`1234 1234 1234 1234`, `MM / YY`, `CVC`); `null` is `#76787F` (`#5F6167`
  *   in the dark theme).
- * @property errorTextStyle The error lines: 13 sp regular in [errorColor].
+ * @property errorTextStyle The error lines, merged over the default: 13 sp regular in [errorColor].
  * @property showLabels Shows the labels above the fields. Defaults to `true`. Without them, accessibility services still
  *   read each field's label.
  * @property holderLabel The label of the cardholder name; `null` uses the form's language ("Card holder").
@@ -92,10 +95,10 @@ public data class PayriffTextStyle @JvmOverloads constructor(
  */
 public data class PayriffCardFormStyle(
     public val layout: PayriffCardFormLayout = PayriffCardFormLayout.GROUPED,
-    public val labelTextStyle: PayriffTextStyle = PayriffTextStyle(size = 14f, weight = PayriffTextStyle.SEMIBOLD),
-    public val inputTextStyle: PayriffTextStyle = PayriffTextStyle(size = 14f),
+    public val labelTextStyle: PayriffTextStyle = PayriffTextStyle(),
+    public val inputTextStyle: PayriffTextStyle = PayriffTextStyle(),
     @ColorInt public val placeholderColor: Int? = null,
-    public val errorTextStyle: PayriffTextStyle = PayriffTextStyle(size = 13f),
+    public val errorTextStyle: PayriffTextStyle = PayriffTextStyle(),
     public val showLabels: Boolean = true,
     public val holderLabel: String? = null,
     public val cardLabel: String? = null,

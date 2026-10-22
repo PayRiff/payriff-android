@@ -23,12 +23,15 @@ internal class CardConfirmation(
     private val api: CardApi,
     private val encrypt: suspend (CardPlaintext) -> EncryptedCard,
     private val newIdempotencyKey: () -> String = { UUID.randomUUID().toString() },
+    private val recheckDevice: () -> Unit = {},
 ) {
 
     suspend fun run(orderId: String, card: CardPlaintext): NextAction {
         try {
             val order = api.order(orderId)
             if (!order.isPayableByCard) throw notPayable(order)
+            // CONTRACT §16.16: a fresh device-integrity check right before the card is encrypted. Throws on a block.
+            recheckDevice()
             val encrypted = encryptOrFail(card)
             card.wipe()
             try {

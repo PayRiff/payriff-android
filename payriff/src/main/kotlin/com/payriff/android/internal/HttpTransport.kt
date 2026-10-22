@@ -62,6 +62,8 @@ internal class UrlConnectionTransport(
             this.connection = connection
             try {
                 if (cancelled) throw IOException("Canceled")
+                // CONTRACT §16.15: pin the SDK's own Client API connections. Does nothing for any other host.
+                CertificatePinner.applyTo(connection)
                 connection.requestMethod = request.method
                 connection.connectTimeout = request.timeoutMillis
                 connection.readTimeout = request.timeoutMillis
@@ -88,6 +90,9 @@ internal class UrlConnectionTransport(
                 }
                 val text = stream?.use { readLimited(it) }.orEmpty()
                 return HttpResponse(status, text, responseHeaders(connection))
+            } catch (e: IOException) {
+                // A pinning rejection travels as a handshake failure; surface it so the Client API never retries it.
+                throw if (CertificatePinning.isPinningFailure(e)) CertificatePinningException() else e
             } finally {
                 connection.disconnect()
             }

@@ -131,6 +131,7 @@ class PayriffApiTest {
             .language(PayriffLanguage.RU)
             .enableLogging(true)
             .allowScreenCaptureInDebug(true)
+            .allowCompromisedDevices(true)
             .build()
         val named = PayriffConfig(
             publishableKey = PUBLISHABLE_KEY,
@@ -138,13 +139,14 @@ class PayriffApiTest {
             language = PayriffLanguage.RU,
             enableLogging = true,
             allowScreenCaptureInDebug = true,
+            allowCompromisedDevices = true,
         )
         assertEquals(named.toString(), built.toString())
         assertEquals(named.toString(), named.newBuilder().build().toString())
         assertEquals(PayriffConfig().toString(), PayriffConfig.Builder().build().toString())
         assertEquals(
             "PayriffConfig(publishableKey=pr_pk_live_***(${PUBLISHABLE_KEY.length}), environment=SANDBOX, language=RU, " +
-                "enableLogging=true, allowScreenCaptureInDebug=true)",
+                "enableLogging=true, allowScreenCaptureInDebug=true, allowCompromisedDevices=true)",
             named.toString(),
         )
         val defaults = PayriffConfig()
@@ -153,6 +155,7 @@ class PayriffApiTest {
         assertNull(defaults.language)
         assertFalse(defaults.enableLogging)
         assertFalse("the card form and the sheet are protected by default", defaults.allowScreenCaptureInDebug)
+        assertFalse("compromised devices are blocked by default", defaults.allowCompromisedDevices)
     }
 
     /** CONTRACT §16.0 item 4: protected by default; only a debuggable app may opt out. */

@@ -55,6 +55,10 @@ final class JavaInterop {
     static void showPaymentView(PayriffPaymentView paymentView, String orderId, String clientSecret) {
         paymentView.setStyle(new PayriffPaymentViewStyle.Builder()
                 .buttonColor(0xFF6C47FF)
+                // Only the colour: the title keeps 16 sp semibold.
+                .buttonTextStyle(new PayriffTextStyle(null, null, 0xFFFFFFFF))
+                .payButtonLabel("Pay now")
+                .secureNoteText("Card data is encrypted on this device")
                 .showPoweredBy(false)
                 .formStyle(new PayriffCardFormStyle.Builder().focusedBorderColor(0xFF6C47FF).build())
                 .build());

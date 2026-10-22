@@ -1,7 +1,7 @@
 package com.payriff.example.android
 
-import android.app.Activity
-import android.app.AlertDialog
+import android.annotation.SuppressLint
+import android.app.Dialog
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
@@ -9,6 +9,9 @@ import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.fragment.app.DialogFragment
+import androidx.fragment.app.FragmentManager
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.payriff.android.PayriffCancelReason
 import com.payriff.android.PayriffPendingReason
 import com.payriff.android.PayriffResult
@@ -16,8 +19,31 @@ import org.json.JSONObject
 import java.math.RoundingMode
 
 /**
- * What the result dialog shows for one card payment. Plain strings, so it survives a configuration change in the
- * activity's saved state (a [PayriffResult] is not parcelable).
+ * What a payment screen hands back to [MainActivity]: the result dialog's content ([ResultContent]) and whether the
+ * order was used up. A [Bundle], so it travels as an activity result ("Pay in page") or as a fragment result (the bottom
+ * sheet and the popup, under [REQUEST_KEY]).
+ */
+object PaymentOutcome {
+
+    /** The fragment result key of [PaymentSheetFragment] and [PaymentPopupFragment]. */
+    const val REQUEST_KEY = "com.payriff.example.android.PAYMENT_OUTCOME"
+
+    private const val KEY_ORDER_USED = "orderUsed"
+
+    /** The outcome of [result]. */
+    fun of(context: Context, result: PayriffResult): Bundle = Bundle().also { outcome ->
+        ResultContent.of(context, result).save(outcome)
+        // Any result but a failure used the order up: an order can be paid once.
+        outcome.putBoolean(KEY_ORDER_USED, result !is PayriffResult.Failed)
+    }
+
+    /** Whether the payment in [outcome] used the order up. */
+    fun orderUsed(outcome: Bundle): Boolean = outcome.getBoolean(KEY_ORDER_USED, false)
+}
+
+/**
+ * What the result dialog shows for one payment. Plain strings, so it fits in a [Bundle] (a [PayriffResult] is not
+ * parcelable).
  */
 class ResultContent(
     val kind: Kind,
@@ -46,7 +72,7 @@ class ResultContent(
         private const val KEY_DETAILS = "result.details"
         private const val KEY_JSON = "result.json"
 
-        /** The content saved by [save], or `null` when no dialog was showing. */
+        /** The content saved by [save], or `null` when [state] holds none. */
         fun restore(state: Bundle?): ResultContent? {
             val kind = state?.getString(KEY_KIND)?.let { name -> Kind.entries.firstOrNull { it.name == name } } ?: return null
             return ResultContent(
@@ -122,43 +148,63 @@ class ResultContent(
     }
 }
 
-/** Shows [content] in a dialog over [activity]; [onDismiss] runs once it closes. */
-fun showResultDialog(activity: Activity, content: ResultContent, onDismiss: () -> Unit): AlertDialog {
-    val view = activity.layoutInflater.inflate(R.layout.dialog_result, null)
-    val color = activity.getColor(
-        when (content.kind) {
-            ResultContent.Kind.SUCCESS -> R.color.success
-            ResultContent.Kind.DECLINED, ResultContent.Kind.FAILED -> R.color.error
-            ResultContent.Kind.PENDING -> R.color.warning
-            ResultContent.Kind.CANCELLED -> R.color.text_secondary
-        },
-    )
-    view.findViewById<FrameLayout>(R.id.resultIconFrame).background = GradientDrawable().apply {
-        shape = GradientDrawable.OVAL
-        setColor(color)
+/**
+ * The outcome of a payment in a dialog: a big icon and title, the amount, the details and the result JSON. A fragment,
+ * so it stays on screen across a rotation.
+ */
+class ResultDialogFragment : DialogFragment() {
+
+    // The dialog's own view: it has no parent to inflate into.
+    @SuppressLint("InflateParams")
+    override fun onCreateDialog(savedInstanceState: Bundle?): Dialog {
+        val view = layoutInflater.inflate(R.layout.dialog_result, null)
+        ResultContent.restore(arguments)?.let { content -> bind(view, content) }
+        return MaterialAlertDialogBuilder(requireContext())
+            .setView(view)
+            .setPositiveButton(R.string.result_close, null)
+            .create()
     }
-    view.findViewById<ImageView>(R.id.resultIcon).setImageResource(
-        when (content.kind) {
-            ResultContent.Kind.SUCCESS -> R.drawable.ic_result_success
-            ResultContent.Kind.DECLINED -> R.drawable.ic_result_declined
-            ResultContent.Kind.PENDING -> R.drawable.ic_result_pending
-            ResultContent.Kind.CANCELLED -> R.drawable.ic_result_cancelled
-            ResultContent.Kind.FAILED -> R.drawable.ic_result_failed
-        },
-    )
-    view.findViewById<TextView>(R.id.resultTitle).text = content.title
-    view.findViewById<TextView>(R.id.resultAmount).apply {
-        text = content.amount
-        visibility = if (content.amount == null) View.GONE else View.VISIBLE
+
+    private fun bind(view: View, content: ResultContent) {
+        val color = view.context.getColor(
+            when (content.kind) {
+                ResultContent.Kind.SUCCESS -> R.color.success
+                ResultContent.Kind.DECLINED, ResultContent.Kind.FAILED -> R.color.error
+                ResultContent.Kind.PENDING -> R.color.warning
+                ResultContent.Kind.CANCELLED -> R.color.text_secondary
+            },
+        )
+        view.findViewById<FrameLayout>(R.id.resultIconFrame).background = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(color)
+        }
+        view.findViewById<ImageView>(R.id.resultIcon).setImageResource(
+            when (content.kind) {
+                ResultContent.Kind.SUCCESS -> R.drawable.ic_result_success
+                ResultContent.Kind.DECLINED -> R.drawable.ic_result_declined
+                ResultContent.Kind.PENDING -> R.drawable.ic_result_pending
+                ResultContent.Kind.CANCELLED -> R.drawable.ic_result_cancelled
+                ResultContent.Kind.FAILED -> R.drawable.ic_result_failed
+            },
+        )
+        view.findViewById<TextView>(R.id.resultTitle).text = content.title
+        view.findViewById<TextView>(R.id.resultAmount).apply {
+            text = content.amount
+            visibility = if (content.amount == null) View.GONE else View.VISIBLE
+        }
+        view.findViewById<TextView>(R.id.resultMessage).text = content.message
+        view.findViewById<TextView>(R.id.resultDetails).text = content.details
+        view.findViewById<TextView>(R.id.resultJson).text = content.json
     }
-    view.findViewById<TextView>(R.id.resultMessage).text = content.message
-    view.findViewById<TextView>(R.id.resultDetails).text = content.details
-    view.findViewById<TextView>(R.id.resultJson).text = content.json
-    val dialog = AlertDialog.Builder(activity)
-        .setView(view)
-        .setPositiveButton(R.string.result_close, null)
-        .create()
-    dialog.setOnDismissListener { onDismiss() }
-    dialog.show()
-    return dialog
+
+    companion object {
+        private const val TAG = "result"
+
+        /** Shows [content], in place of a result dialog that is still open. */
+        fun show(manager: FragmentManager, content: ResultContent) {
+            (manager.findFragmentByTag(TAG) as? DialogFragment)?.dismissAllowingStateLoss()
+            val dialog = ResultDialogFragment().apply { arguments = Bundle().also(content::save) }
+            manager.beginTransaction().add(dialog, TAG).commitAllowingStateLoss()
+        }
+    }
 }

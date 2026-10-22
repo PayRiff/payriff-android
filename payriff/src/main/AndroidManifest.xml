@@ -4,6 +4,28 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!--
+        Device integrity (CONTRACT §16.16): the packages the SDK checks for an installed root manager or hooking
+        framework. Android 11+ hides other apps unless they are declared here; without this the checks always report
+        "not installed". The SDK only asks whether each of these is present and never lists all installed apps, so no
+        QUERY_ALL_PACKAGES permission is used.
+    -->
+    <queries>
+        <package android:name="com.topjohnwu.magisk" />
+        <package android:name="io.github.huskydg.magisk" />
+        <package android:name="me.weishu.kernelsu" />
+        <package android:name="me.bmax.apatch" />
+        <package android:name="eu.chainfire.supersu" />
+        <package android:name="com.noshufou.android.su" />
+        <package android:name="com.koushikdutta.superuser" />
+        <package android:name="com.thirdparty.superuser" />
+        <package android:name="com.yellowes.su" />
+        <package android:name="com.kingroot.kinguser" />
+        <package android:name="com.kingo.root" />
+        <package android:name="de.robv.android.xposed.installer" />
+        <package android:name="org.lsposed.manager" />
+    </queries>
+
     <application>
         <!--
             The 3-D Secure sheet of the card flow. configChanges keeps the WebView (and a 3-D Secure page in progress)

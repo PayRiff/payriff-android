@@ -2,6 +2,7 @@ package com.payriff.android
 
 import android.content.Context
 import androidx.annotation.VisibleForTesting
+import com.payriff.android.internal.DeviceIntegrityGuard
 import com.payriff.android.internal.HostApp
 import com.payriff.android.internal.HttpTransport
 import com.payriff.android.internal.PaymentGuard
@@ -106,6 +107,25 @@ public object Payriff {
     @JvmStatic
     public fun retrieveOrder(orderId: String, clientSecret: String, callback: PayriffCallback<PayriffClientOrder>): PayriffCancellable =
         launchWithCallback(callback) { retrieveOrder(orderId, clientSecret) }
+
+    /**
+     * Whether this device looks rooted or tampered with, or is running a hooking framework such as Frida or Xposed
+     * (CONTRACT §16.16). The check is local and best-effort: it stops the common tools but a determined attacker can
+     * bypass it. Call it to decide early, for example to offer another payment method; card payments already run the
+     * same check and refuse a compromised device with [PayriffErrorCode.DEVICE_COMPROMISED], unless
+     * [PayriffConfig.allowCompromisedDevices] is on.
+     *
+     * The check fails closed: when it cannot complete, for example because one of its probes throws, the device counts
+     * as compromised with the signal `check failed`, and this returns `true`.
+     *
+     * The result is independent of [PayriffConfig.allowCompromisedDevices]. The first call that completes the file
+     * checks caches them for the process; the runtime checks (hooking, Frida, debugger) run on every call.
+     */
+    @JvmStatic
+    public fun isDeviceCompromised(context: Context): Boolean {
+        onContextAvailable(context)
+        return DeviceIntegrityGuard.isCompromised(context)
+    }
 
     /** Records the host app ([HostApp]). Called by the start-up provider and by every card payment. */
     internal fun onContextAvailable(context: Context) {

@@ -6,10 +6,10 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
-// The example's defaults come from the git-ignored local.properties in the repository root:
+// The example's settings come from the git-ignored local.properties in the repository root:
 //   payriff.publishableKey=pr_pk_live_...  (the card flow's publishable key)
 //   payriff.environment=SANDBOX            (SANDBOX or PRODUCTION)
-// They are compiled into the DEBUG BuildConfig only; release builds start empty and use the Settings screen.
+// They are compiled into the DEBUG BuildConfig only; release builds have no publishable key.
 // The example holds no secret key: your server creates the order with its secret key (POST /api/v3/orders).
 val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
@@ -81,5 +81,10 @@ kotlin {
 dependencies {
     implementation(project(":payriff"))
     implementation(libs.androidx.core.ktx)
-    implementation(libs.kotlinx.coroutines.android)
+    // BottomSheetDialogFragment, the dialogs and the Material 3 theme of the example; the SDK itself needs none of it.
+    implementation(libs.material)
+
+    testImplementation(libs.junit)
+    // Android's org.json for the JVM unit tests (the paste parsing).
+    testImplementation(libs.org.json)
 }

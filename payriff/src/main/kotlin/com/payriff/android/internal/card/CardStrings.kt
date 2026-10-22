@@ -58,6 +58,7 @@ internal object CardStrings {
                 "secure" to "PCI DSS ilə təhlükəsiz ödəniş",
                 "poweredBy" to "Payriff tərəfindən hazırlanıb",
                 "notPayable" to "Bu sifarişi kartla ödəmək mümkün deyil",
+                "deviceNotSupported" to "Təhlükəsizlik səbəbilə bu cihazda kartla ödəniş mümkün deyil",
             ),
         ),
         "en" to mapOf(
@@ -102,6 +103,7 @@ internal object CardStrings {
                 "secure" to "Proceed securely by PCI DSS",
                 "poweredBy" to "Powered by Payriff",
                 "notPayable" to "This order cannot be paid by card",
+                "deviceNotSupported" to "Card payments aren't available on this device for security reasons",
             ),
         ),
         "ru" to mapOf(
@@ -146,6 +148,7 @@ internal object CardStrings {
                 "secure" to "Безопасная оплата по PCI DSS",
                 "poweredBy" to "При поддержке Payriff",
                 "notPayable" to "Этот заказ нельзя оплатить картой",
+                "deviceNotSupported" to "По соображениям безопасности оплата картой на этом устройстве недоступна",
             ),
         ),
     )
@@ -176,9 +179,13 @@ internal object CardStrings {
     /** The payment view's error line for an order that cannot be paid by card: "This order cannot be paid by card". */
     const val VIEW_NOT_PAYABLE = "notPayable"
 
+    /** The payment view's error line on a compromised device: "Card payments aren't available…" (CONTRACT §16.16). */
+    const val VIEW_DEVICE_NOT_SUPPORTED = "deviceNotSupported"
+
     /**
-     * The payment view's copy (CONTRACT §16.14): [VIEW_PAY] (followed by the amount), [VIEW_SECURE] (the PCI DSS line),
-     * [VIEW_POWERED_BY] (split at "Payriff", where the logo goes) or [VIEW_NOT_PAYABLE] (the error line).
+     * The payment view's copy (CONTRACT §16.14, §16.16): [VIEW_PAY] (followed by the amount), [VIEW_SECURE] (the PCI
+     * DSS line), [VIEW_POWERED_BY] (split at "Payriff", where the logo goes), [VIEW_NOT_PAYABLE] (the error line) or
+     * [VIEW_DEVICE_NOT_SUPPORTED] (the error line on a compromised device).
      */
     fun view(language: PayriffLanguage, key: String): String = group(language, "view").getValue(key)
 

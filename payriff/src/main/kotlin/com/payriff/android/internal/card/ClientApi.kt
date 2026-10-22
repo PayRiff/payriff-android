@@ -8,6 +8,8 @@ import com.payriff.android.PayriffErrorCode
 import com.payriff.android.PayriffLanguage
 import com.payriff.android.PayriffPaymentStatus
 import com.payriff.android.internal.ApiParsing
+import com.payriff.android.internal.CertificatePinning
+import com.payriff.android.internal.CertificatePinningException
 import com.payriff.android.internal.HostApp
 import com.payriff.android.internal.HttpRequest
 import com.payriff.android.internal.HttpResponse
@@ -184,6 +186,10 @@ internal class CardApiClient(
             HttpLog.logRequest(request)
             val response = try {
                 withTimeoutOrNull(timeoutMillis) { transport.execute(request) }
+            } catch (e: CertificatePinningException) {
+                // CONTRACT §16.15: a pinning failure is a non-retryable NETWORK_ERROR; nothing was sent.
+                PayriffLog.warning { "${request.method} $path failed: the server certificate is not pinned." }
+                throw PayriffError(PayriffErrorCode.NETWORK_ERROR, CertificatePinning.FAILURE_MESSAGE, isRetryable = false)
             } catch (e: IOException) {
                 null
             } catch (e: RuntimeException) {

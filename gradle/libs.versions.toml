@@ -14,6 +14,9 @@ androidxActivity = "1.9.3"
 androidxCore = "1.13.1"
 coroutines = "1.9.0"
 
+# Example app only (the sample's bottom sheet, dialogs and theme); never a dependency of the library.
+material = "1.13.0"
+
 # Tests
 junit = "4.13.2"
 # Test classpath only: stands in for Android's built-in org.json in JVM unit tests and is never published (the POM
@@ -27,6 +30,7 @@ androidx-activity = { module = "androidx.activity:activity", version.ref = "andr
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+material = { module = "com.google.android.material:material", version.ref = "material" }
 junit = { module = "junit:junit", version.ref = "junit" }
 org-json = { module = "org.json:json", version.ref = "orgJson" }
 

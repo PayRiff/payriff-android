@@ -15,6 +15,7 @@ import com.payriff.android.internal.card.CardFormPlan.Label
 import com.payriff.android.internal.card.CardFormStyles
 import com.payriff.android.internal.card.CardValidation
 import com.payriff.android.internal.card.FieldUiState
+import com.payriff.android.internal.card.ResolvedTextStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -150,11 +151,11 @@ class CardFormLayoutTest {
 
     @Test
     fun theDefaultsAreThePaymentPagesInLightAndDark() {
-        // CONTRACT §16.14 "Colours" and "Metrics".
+        // CONTRACT §16.14 "Colours" and "Metrics". Nothing set in the text styles: every text keeps its default.
         with(default) {
-            assertEquals(PayriffTextStyle(size = 14f, weight = 600), labelTextStyle)
-            assertEquals(PayriffTextStyle(size = 14f, weight = 400), inputTextStyle)
-            assertEquals(PayriffTextStyle(size = 13f, weight = 400), errorTextStyle)
+            assertEquals(PayriffTextStyle(), labelTextStyle)
+            assertEquals(PayriffTextStyle(), inputTextStyle)
+            assertEquals(PayriffTextStyle(), errorTextStyle)
             assertTrue(showLabels)
             assertEquals(listOf(null, null), listOf(holderLabel, cardLabel))
             assertEquals(listOf<Int?>(null, null, null, null, null), listOf(placeholderColor, fieldBackgroundColor, borderColor, focusedBorderColor, errorColor))
@@ -251,6 +252,8 @@ class CardFormLayoutTest {
         }
         val ownErrorText = CardFormStyles.resolve(custom.copy(errorTextStyle = PayriffTextStyle(size = 12f, color = LABEL)), false, 1f)
         assertEquals(LABEL, ownErrorText.error.color)
+        assertEquals(12f, ownErrorText.error.size, 0f)
+        assertEquals("the weight it leaves out stays regular", 400, ownErrorText.error.weight)
 
         // Sizes that make no sense are clamped; a hairline border still shows as one pixel.
         val odd = CardFormStyles.resolve(
@@ -271,6 +274,36 @@ class CardFormLayoutTest {
         assertEquals(1f, odd.label.size, 0f)
         assertEquals(1000, odd.label.weight)
         assertEquals(0, CardFormStyles.resolve(PayriffCardFormStyle(borderWidth = 0f), false, 3f).borderWidthPx)
+        // A text size that is not a number keeps the default.
+        val notANumber = CardFormStyles.resolve(PayriffCardFormStyle(inputTextStyle = PayriffTextStyle(size = Float.POSITIVE_INFINITY)), false, 1f)
+        assertEquals(14f, notANumber.input.size, 0f)
+    }
+
+    @Test
+    fun aTextStyleIsMergedOverItsDefault() {
+        // What a PayriffTextStyle leaves out keeps the default of its text: a colour alone keeps 14 sp semibold.
+        val partial = PayriffCardFormStyle(
+            labelTextStyle = PayriffTextStyle(color = LABEL),
+            inputTextStyle = PayriffTextStyle(size = 18f),
+            errorTextStyle = PayriffTextStyle(weight = PayriffTextStyle.BOLD),
+        )
+        fun ResolvedTextStyle.look() = Triple(size, weight, color)
+
+        val light = CardFormStyles.resolve(partial, night = false, density = 1f)
+        assertEquals(Triple(14f, 600, LABEL), light.label.look())
+        assertEquals(Triple(18f, 400, 0xFF4D4F54.toInt()), light.input.look())
+        assertEquals(Triple(13f, 700, 0xFFEC4D3D.toInt()), light.error.look())
+        assertTrue(listOf(light.label, light.input, light.error).all { it.typeface == null })
+
+        // The colours left out still follow the theme; the one set is used in both.
+        val dark = CardFormStyles.resolve(partial, night = true, density = 1f)
+        assertEquals(Triple(14f, 600, LABEL), dark.label.look())
+        assertEquals(Triple(18f, 400, 0xFF8E8E93.toInt()), dark.input.look())
+        assertEquals(Triple(13f, 700, 0xFFEC5545.toInt()), dark.error.look())
+
+        // An empty text style is the default.
+        val empty = CardFormStyles.resolve(PayriffCardFormStyle(labelTextStyle = PayriffTextStyle()), night = false, density = 1f)
+        assertEquals(CardFormStyles.resolve(default, night = false, density = 1f).label.look(), empty.label.look())
     }
 
     @Test

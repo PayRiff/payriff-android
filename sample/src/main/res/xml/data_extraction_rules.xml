@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 12+: keep the example's settings out of cloud backups and device-to-device transfers.
+<!-- Android 12+: keep the example's data out of cloud backups and device-to-device transfers.
      android:allowBackup="false" alone does not cover device transfers. -->
 <data-extraction-rules>
     <cloud-backup>

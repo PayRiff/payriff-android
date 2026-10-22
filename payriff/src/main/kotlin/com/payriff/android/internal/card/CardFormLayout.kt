@@ -102,7 +102,7 @@ internal object CardFormPlan {
         }
 }
 
-/** A [PayriffTextStyle] with its colour decided. */
+/** A [PayriffTextStyle] merged over its default: every property decided. */
 internal class ResolvedTextStyle(val size: Float, val weight: Int, val typeface: Typeface?, @ColorInt val color: Int)
 
 /** [PayriffCardFormStyle] with every default filled in for one theme and screen density, sizes in pixels. */
@@ -168,18 +168,29 @@ internal object CardFormStyles {
     /** Payriff's brand colour, the focused outline in both themes. */
     const val FOCUS = 0xFF4DBDC6.toInt()
 
+    /** The text sizes in sp: labels 14 semibold, typed text and placeholders 14 regular, error lines 13 regular. */
+    const val LABEL_TEXT_SIZE = 14f
+    const val INPUT_TEXT_SIZE = 14f
+    const val ERROR_TEXT_SIZE = 13f
+
     /**
-     * Fills in the defaults of [style] for the light or dark ([night]) theme; [density] converts dp to pixels. Negative
-     * sizes count as 0.
+     * Fills in the defaults of [style] for the light or dark ([night]) theme; [density] converts dp to pixels. Each text
+     * style is merged over its default. Negative sizes count as 0.
      */
     fun resolve(style: PayriffCardFormStyle, night: Boolean, density: Float): ResolvedCardFormStyle {
         val error = style.errorColor ?: if (night) ERROR_DARK else ERROR_LIGHT
         return ResolvedCardFormStyle(
             layout = style.layout,
             showLabels = style.showLabels,
-            label = resolveText(style.labelTextStyle, if (night) TEXT_DARK else TEXT_LIGHT),
-            input = resolveText(style.inputTextStyle, if (night) INPUT_DARK else INPUT_LIGHT),
-            error = resolveText(style.errorTextStyle, error),
+            label = resolveText(
+                style.labelTextStyle,
+                ResolvedTextStyle(LABEL_TEXT_SIZE, PayriffTextStyle.SEMIBOLD, null, if (night) TEXT_DARK else TEXT_LIGHT),
+            ),
+            input = resolveText(
+                style.inputTextStyle,
+                ResolvedTextStyle(INPUT_TEXT_SIZE, PayriffTextStyle.REGULAR, null, if (night) INPUT_DARK else INPUT_LIGHT),
+            ),
+            error = resolveText(style.errorTextStyle, ResolvedTextStyle(ERROR_TEXT_SIZE, PayriffTextStyle.REGULAR, null, error)),
             placeholderColor = style.placeholderColor ?: if (night) PLACEHOLDER_DARK else PLACEHOLDER_LIGHT,
             fieldBackgroundColor = style.fieldBackgroundColor ?: FIELD_BACKGROUND,
             borderColor = style.borderColor ?: if (night) BORDER_DARK else BORDER_LIGHT,
@@ -196,19 +207,23 @@ internal object CardFormStyles {
         )
     }
 
-    /** Text sizes below 1 sp count as 1 sp; weights are kept within 1…1000. */
-    fun resolveText(style: PayriffTextStyle, @ColorInt defaultColor: Int): ResolvedTextStyle = ResolvedTextStyle(
-        size = if (style.size.isFinite()) style.size.coerceAtLeast(1f) else DEFAULT_TEXT_SIZE,
-        weight = style.weight.coerceIn(1, 1000),
-        typeface = style.typeface,
-        color = style.color ?: defaultColor,
-    )
+    /**
+     * [style] merged over [default]: what [style] leaves out (`null`) keeps the default. A size below 1 sp counts as
+     * 1 sp, and one that is not a number keeps the default; weights are kept within 1…1000.
+     */
+    fun resolveText(style: PayriffTextStyle, default: ResolvedTextStyle): ResolvedTextStyle {
+        val size = style.size ?: default.size
+        return ResolvedTextStyle(
+            size = if (size.isFinite()) size.coerceAtLeast(1f) else default.size,
+            weight = (style.weight ?: default.weight).coerceIn(1, 1000),
+            typeface = style.typeface ?: default.typeface,
+            color = style.color ?: default.color,
+        )
+    }
 
     /** [dp] in pixels; negative or not-a-number counts as 0. */
     fun px(dp: Float, density: Float): Int = (size(dp) * density).roundToInt()
 
     /** A size in dp; negative or not-a-number counts as 0. */
     fun size(dp: Float): Float = if (dp.isFinite()) dp.coerceAtLeast(0f) else 0f
-
-    private const val DEFAULT_TEXT_SIZE = 16f
 }

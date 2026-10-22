@@ -2,10 +2,11 @@
 
 Accept Payriff card payments in Android apps. Your server creates the order with its secret key and gives the app the order's `orderId` and `clientSecret`. The app shows `PayriffPaymentView`, a ready-made payment screen that pays the order with your **publishable key**, runs 3-D Secure in a native sheet and returns a typed `PayriffResult`. For a screen of your own, use the `PayriffCardForm` and `PayriffCardPaymentLauncher` it is built on.
 
-- A ready-made payment view for Views, Compose and Java. By default it looks like the card part of Payriff's hosted payment page (pay.payriff.com); you can change its colours, sizes and parts
+- A ready-made payment view for Views, Compose and Java. By default it looks like the card part of Payriff's hosted payment page (pay.payriff.com); you can change its colours, sizes, texts and parts
 - A native card form (Visa and Mastercard), validated and formatted as the customer types, in Azerbaijani, English and Russian, in the light and the dark theme
 - Only the **publishable key** in the app: the secret key stays on your server
 - Card data is encrypted on the device (AES-256-GCM, key wrapped with RSA-OAEP SHA-256 and Payriff's pinned key) and leaves it only as ciphertext
+- Certificate pinning on every Client API call, and root/hooking detection that refuses card payments on a compromised device
 - 3-D Secure in a native bottom sheet; survives rotation, theme changes and process death
 
 Documentation of the Payriff API: <https://docs.payriff.com>
@@ -179,6 +180,7 @@ paymentView.setOrder(orderId, clientSecret);
 | `language` | `PayriffLanguage?` | `null` | Language of the form and the 3-D Secure sheet. `null` uses the device language: `az*` gives `AZ`, `ru*` gives `RU`, anything else `EN`. |
 | `enableLogging` | `Boolean` | `false` | See [Logging](#logging) |
 | `allowScreenCaptureInDebug` | `Boolean` | `false` | Debug builds only: lets screenshots and screen recordings capture the form and the 3-D Secure sheet, for QA. Release builds ignore it; see [Platform notes](#platform-notes). |
+| `allowCompromisedDevices` | `Boolean` | `false` | **Development only.** Lets card payments run on a rooted device, when a hooking framework is detected, or when the check cannot complete. The default refuses them with `DEVICE_COMPROMISED`; `true` only logs a warning. Never ship it on. See [Platform notes](#platform-notes). |
 
 `Payriff.configure` may be called again; the new configuration applies to calls started afterwards. It never throws. A `publishableKey` that is not a publishable key, for example a secret key pasted by mistake, is logged as a warning (`Invalid configuration: …`, when logging is on). `PayriffConfig.toString()` is safe to log: the key appears as `pr_pk_live_***(<length>)`.
 
@@ -207,14 +209,19 @@ Every call needs `Payriff.configure` first; before it, card calls fail with `NOT
 
 **Full screen.** Give the view the whole screen of an activity, as in the [quick start](#3-show-the-payment-view), or of a fragment. It scrolls when the keyboard is up and keeps the footer at the bottom when there is room. It pads its content for the system bars, the display cutout and the keyboard from the window insets it receives, so it works edge to edge; when a parent already applies and consumes the insets, it adds nothing.
 
-**Bottom sheet or dialog.** In a parent that gives it only the height it needs, such as a bottom sheet or a dialog, the view is as tall as its content and scrolls when the screen is shorter than that. Host it in a `BottomSheetDialogFragment` (Material Components) or in a `DialogFragment`: when the activity is recreated during 3-D Secure, the fragment comes back with the view and its id, so the view receives the result.
+**Bottom sheet or dialog.** In a parent that gives it only the height it needs, such as a bottom sheet or a dialog, the view is as tall as its content and scrolls when the screen is shorter than that. Host it in a `BottomSheetDialogFragment` (Material Components) or in a `DialogFragment`: when the activity is recreated during 3-D Secure, the fragment comes back with the view and its id, so the view receives the result. In a bottom sheet, put the view in a `NestedScrollView`, so that the sheet and the form scroll together when the keyboard leaves too little room. A Material 3 bottom sheet that draws edge to edge makes room for the navigation bar and the keyboard itself but passes the window insets on to its content: stop them before the view, as below, or the view adds them again.
 
 ```xml
 <!-- res/layout/payment_sheet.xml -->
-<com.payriff.android.PayriffPaymentView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/paymentView"
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content" />
+    android:layout_height="wrap_content">
+
+    <com.payriff.android.PayriffPaymentView
+        android:id="@+id/paymentView"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content" />
+</androidx.core.widget.NestedScrollView>
 ```
 
 ```kotlin
@@ -225,6 +232,8 @@ class PaymentSheet : BottomSheetDialogFragment() {
         inflater.inflate(R.layout.payment_sheet, container, false)
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        // The sheet makes room for the navigation bar and the keyboard: the view inside needs no insets.
+        ViewCompat.setOnApplyWindowInsetsListener(view) { _, _ -> WindowInsetsCompat.CONSUMED }
         val paymentView = view.findViewById<PayriffPaymentView>(R.id.paymentView)
         // Shows the sheet's own background, rounded corners included.
         paymentView.style = PayriffPaymentViewStyle(backgroundColor = Color.TRANSPARENT)
@@ -254,6 +263,8 @@ paymentView.style = PayriffPaymentViewStyle(
     buttonColor = getColor(R.color.brand),
     buttonCornerRadius = 26f,                             // dp
     buttonHeight = 52f,                                   // dp
+    buttonTextStyle = PayriffTextStyle(weight = PayriffTextStyle.BOLD), // keeps 16 sp and white
+    payButtonLabel = "Pay now",                           // "Pay now 1.02 AZN"
     showPoweredBy = false,
     formStyle = PayriffCardFormStyle(
         layout = PayriffCardFormLayout.STACKED,
@@ -268,15 +279,17 @@ paymentView.style = PayriffPaymentViewStyle(
 | `backgroundColor` | `#FCFCFD`; `#222224` in the dark theme |
 | `padding` | 20 dp on every side. The view adds the system bars, the display cutout and the keyboard from the window insets it receives. |
 | `buttonColor` | Payriff's brand colour `#4DBDC6` |
-| `buttonTextStyle` | 16 sp semibold, white. The spinner shown while paying takes its colour. |
+| `buttonTextStyle` | 16 sp semibold, white; a `PayriffTextStyle` you set is merged over it. The spinner shown while paying takes its colour. |
 | `buttonHeight`, `buttonCornerRadius` | 44 dp (taller with large text) and 16 dp |
+| `payButtonLabel` | `null`: "Pay" in the view's language ("Ödə", "Оплатить"). Your word is shown as it is in every language, followed by the amount and the currency ("Pay now 1.02 AZN"), and alone while the amount is unknown. A blank text keeps "Pay". |
 | `secondaryTextColor` | `#76787F`: the secure line and the footer, 12 sp regular |
 | `showBadges` | `true`: the Mastercard and Visa badges under the button |
 | `showSecureNote` | `true`: the lock and "Proceed securely by PCI DSS" |
-| `showPoweredBy` | `true`: "Powered by" and the Payriff logo at the bottom |
+| `secureNoteText` | `null`: "Proceed securely by PCI DSS" in the view's language. Your text is shown as it is in every language; a blank text keeps the default. |
+| `showPoweredBy` | `true`: "Powered by" and the Payriff logo at the bottom. In the dark theme the logo's wordmark is light (`#E1E4E8`). |
 | `formStyle` | `PayriffCardFormStyle()`: see [Customise the card form](#customise-the-card-form). Its `errorColor` and `errorTextStyle` also style the error line under the Pay button. |
 
-Colours you set are used in both themes. A `PayriffTextStyle` replaces the default text style as a whole, and its `null` colour keeps the default colour. The space between the parts is fixed, as on the hosted page: the button 24 dp below the form, the badges 24 dp below the button, the secure line 20 dp below the badges (24 dp below the button without them) and the footer at least 24 dp below the rest. Changing `style` keeps what the customer typed. From Java, use `new PayriffPaymentViewStyle.Builder()…build()`.
+Colours you set are used in both themes. A `PayriffTextStyle` is merged over the default: what you leave out keeps it, so `buttonTextStyle = PayriffTextStyle(color = …)` changes only the colour. The space between the parts is fixed, as on the hosted page: the button 24 dp below the form, the badges 24 dp below the button, the secure line 20 dp below the badges (24 dp below the button without them) and the footer at least 24 dp below the rest. Changing `style` keeps what the customer typed. From Java, use `new PayriffPaymentViewStyle.Builder()…build()`.
 
 ## Build your own screen
 
@@ -348,10 +361,10 @@ cardForm.style = PayriffCardFormStyle(
 | Property | Default |
 |---|---|
 | `layout` | `GROUPED`: the cardholder name, then one card box. `STACKED`: every field separate, with its own label and error. |
-| `labelTextStyle` | 14 sp semibold, `#34363A` (`#E1E4E8` in the dark theme) |
-| `inputTextStyle` | 14 sp regular, `#4D4F54` (`#8E8E93` in the dark theme); the placeholders take its size |
+| `labelTextStyle` | 14 sp semibold, `#34363A` (`#E1E4E8` in the dark theme); a `PayriffTextStyle` you set is merged over it |
+| `inputTextStyle` | 14 sp regular, `#4D4F54` (`#8E8E93` in the dark theme), merged like the labels; the placeholders take its size |
 | `placeholderColor` | `#76787F` (`#5F6167` in the dark theme) |
-| `errorTextStyle` | 13 sp regular, in `errorColor` |
+| `errorTextStyle` | 13 sp regular, in `errorColor`, merged like the labels |
 | `showLabels`, `holderLabel`, `cardLabel` | `true`; `null` uses the form's language ("Card holder", "Card information"). Without labels, accessibility services still read each field's label. |
 | `fieldBackgroundColor` | transparent: the fields show the background behind the form |
 | `borderColor` | `#ECEEF0` (`#3F4145` in the dark theme) |
@@ -361,7 +374,7 @@ cardForm.style = PayriffCardFormStyle(
 | `holderHeight`, `rowHeight` | 46 and 40 dp, outline included; larger text makes them taller. The card box with its two rows is 79 dp tall. |
 | `horizontalPadding`, `labelSpacing`, `sectionSpacing` | 14, 10 and 16 dp |
 
-`PayriffTextStyle` has `size` (sp), `weight`, `color` and `typeface`. It replaces the default text style as a whole, and its `null` colour keeps the default colour. A section's outline turns `errorColor` while it shows an error, and `focusedBorderColor` while one of its fields has the focus. Colours you set are used in both themes. Changing `style` keeps what the customer typed. From Java, use `new PayriffCardFormStyle.Builder()…build()`.
+`PayriffTextStyle` has `size` (sp), `weight`, `color` and `typeface`, all optional. It is merged over the default of the text it styles: what you leave out keeps the default, so `labelTextStyle = PayriffTextStyle(color = …)` keeps 14 sp semibold. From Java, pass `null` for what you leave out: `new PayriffTextStyle(null, null, color)`. A section's outline turns `errorColor` while it shows an error, and `focusedBorderColor` while one of its fields has the focus. Colours you set are used in both themes. Changing `style` keeps what the customer typed. From Java, use `new PayriffCardFormStyle.Builder()…build()`.
 
 ## Order details
 
@@ -426,7 +439,8 @@ The result the SDK returns is for your app's UI only. It is worked out on the cu
 | `UNAUTHORIZED` | HTTP 401: the publishable key is wrong or revoked, or your package name is not allowed for it | no | yes |
 | `RATE_LIMITED` | HTTP 429, after 3 retries (1 s, 2 s, 4 s) | no | yes |
 | `UNEXPECTED_RESPONSE` | Payriff answered with a next step the SDK cannot run, and the status was not final | no | no |
-| `NETWORK_ERROR` | No HTTP response: offline, DNS, TLS or timeout (a `/pay` was already retried once) | yes | no |
+| `DEVICE_COMPROMISED` | The device looks rooted or tampered with, a hooking framework is loaded, or the check could not complete (see [Platform notes](#platform-notes)); the same order can be paid on another device | no | no |
+| `NETWORK_ERROR` | No HTTP response: offline, DNS, TLS, timeout or a pinning failure (a `/pay` was already retried once, but a pinning failure is never retried) | yes | no |
 | `NOT_CONFIGURED` | `Payriff.configure` was never called | no | no |
 | `INVALID_CONFIG` | `publishableKey` is missing or not a publishable key | no | no |
 | `INVALID_ORDER` | A blank `orderId`, or a `clientSecret` that is not a `pr_cs_…` value | no | no |
@@ -442,6 +456,7 @@ The result the SDK returns is for your app's UI only. It is worked out on the cu
 |---|---|
 | SDK version | `Payriff.version` (also the constant `Payriff.VERSION`) |
 | A card payment is running | `Payriff.isPaymentInProgress` |
+| The device looks compromised | `Payriff.isDeviceCompromised(context)` |
 | API base URL | `PayriffEnvironment.apiBaseUrl`, for example `https://sb-api.payriff.com` |
 | Status parser | `PayriffPaymentStatus.fromRaw(raw)` (aliases such as `PAID` give `APPROVED`) |
 | Result helpers | `result.isSuccess`, `result.payment`, `result.error` |
@@ -478,7 +493,9 @@ Privacy rules:
 - **App identity.** Every Client API request carries your package name as `X-Client-App-Id`, and never `Origin` or `Authorization`. Payriff allows your publishable key only for the package names you registered.
 - **Start-up provider.** The SDK's manifest adds a small content provider (`com.payriff.android.internal.PayriffInitProvider`). When your process starts, it records your package name and whether the app is debuggable, so `Payriff.retrieveOrder` works without a `Context`. It is not exported, stores nothing and does no I/O. If you remove it from your merged manifest (`tools:node="remove"`), the SDK learns this at the first card payment instead and, until then, treats the app as a release build.
 - **Security.** The 3-D Secure activity is not exported, never injects JavaScript, does not change the user agent, never proceeds on TLS errors, blocks plain-http pages, and keeps third-party cookies on only for its own WebViews (3-D Secure needs them).
-- **3-D Secure website data.** When a payment that showed 3-D Secure pages ends, the SDK removes what those pages left: the site-wide (`Path=/`) cookies of the hosts they loaded, the storage that `WebStorage.deleteOrigin` clears for those hosts, and the WebView HTTP cache. Android keeps WebView data per app, so your own WebViews lose the same data for those hosts too, and the HTTP cache is cleared for the whole app.
+- **Certificate pinning.** Every Client API call (order, pay, the 3-D Secure step, status) to `api.payriff.com` and `sb-api.payriff.com` is pinned: the SDK keeps Android's normal TLS validation and also requires a pinned Payriff CA key in the validated chain. A proxy's or a mis-issued certificate is refused with a non-retryable `NETWORK_ERROR` ("Payriff's server certificate could not be verified."), and nothing is sent. The pins are CA keys, not the leaf, so the yearly certificate renewal keeps working, and there is no switch to turn pinning off. The 3-D Secure WebViews load the banks' own pages and are **not** pinned.
+- **Device integrity.** Before a card payment, and again just before the card is encrypted, the SDK checks for a rooted or tampered device and a loaded hooking framework: an `su` binary, Magisk/KernelSU/APatch files, an installed root-manager app, Xposed/LSPosed, Frida, or a debugger attached to a release build. On a match it refuses the payment with `DEVICE_COMPROMISED` ("Card payments are not available on this device."); `PayriffPaymentView` then shows "Card payments aren't available on this device for security reasons", keeps Pay disabled and does not load the order. Call `Payriff.isDeviceCompromised(context)` to check yourself, for example to offer another method. The check fails closed: if it cannot complete (one of its probes throws), the device counts as compromised with the signal `check failed`, so breaking the check does not skip it, and `isDeviceCompromised` returns `true`. The checks are local and best-effort: they stop the common tools, not a determined attacker. For development on a rooted or hooked test device set `PayriffConfig(allowCompromisedDevices = true)`, which only logs a warning naming the matched signals, `check failed` included — never ship it on. Emulators, `test-keys` builds and custom ROMs are not treated as compromised on their own.
+- **3-D Secure website data.** When a payment that showed 3-D Secure pages ends, the SDK removes what those pages left: the cookies of the hosts they loaded — expired for `Path=/` and for every path prefix of each page's URL, with and without the `/` that follows it in the path (`/acs`, `/acs/`, `/acs/challenge`), as the Flutter SDK does, for the host and its parent domains, with `; Secure` added for https pages (so `__Secure-`/`__Host-` cookies go too) — the storage that `WebStorage.deleteOrigin` clears for those hosts, and the WebView HTTP cache. Android keeps WebView data per app, so your own WebViews lose the same data for those hosts too, and the HTTP cache is cleared for the whole app.
 
 ## Known limitations
 
@@ -491,23 +508,20 @@ These are documented platform limits, not bugs.
 
 ## Example app
 
-The `sample` module (application id `com.payriff.example.android`) has one main screen, **Card (native)**:
+The `sample` module (application id `com.payriff.example.android`) has one screen, like the iOS and Flutter examples:
 
-- **Order from your backend**: `orderId` and `clientSecret` fields and **Paste order**, which reads the JSON `{"orderId", "clientSecret"}` from the clipboard, or the two values separated by white space. The screen then shows the order through `Payriff.retrieveOrder`: merchant, status, amount and description.
-- **Pay with PayriffPaymentView** opens the order in the SDK's payment view, full screen under a back button (`PaymentActivity`). That screen closes with the view's first result.
-- Below it, the same payment on a screen built from the SDK's parts: **the card form** with the cardholder name (a checkbox hides it) and **Pay**, which calls `PayriffCardPaymentLauncher.confirm`. **Form style** switches the form between Payriff's default look and a custom `PayriffCardFormStyle`.
-- The outcome of either payment opens in a result dialog with the status, the amount, the order id and the result JSON. Any result but a failure clears the order: an order can be paid once.
-- **Settings**: publishable key, environment and language; switches for logging and for screenshots in debug builds; and the look of the payment view: **Custom style** (a custom `PayriffPaymentViewStyle`), or the default look without the card form labels, the card badges, the secure line or "Powered by Payriff".
-- **SDK log**: a live console that renders `entry.formatted`.
+- `orderId` and `clientSecret` fields, and **Paste**, which reads the JSON `{"orderId", "clientSecret"}` from the clipboard, or the two values separated by white space.
+- **Pay in page**, **Pay in bottom sheet** and **Pay in popup** show the SDK's `PayriffPaymentView` for that order: on a screen of its own under a back button (`PaymentActivity`), in a `BottomSheetDialogFragment` sized to its content (`PaymentSheetFragment`) or in a `DialogFragment` (`PaymentPopupFragment`). 3-D Secure opens in the SDK's sheet. Each closes with the view's first result; while a payment runs, back and the other ways to close it do nothing.
+- The outcome opens in a result dialog: a large icon and title ("Payment successful", "Payment declined", "Payment pending", "Payment cancelled" or "Payment failed"), the amount, the order id, the status and the result JSON. Any result but a failure clears the fields: an order can be paid once.
 
-The example holds no secret key and creates no orders: your server creates the order with its secret key (`POST /api/v3/orders`) and returns `orderId` and `clientSecret`. Payriff accepts the publishable key only from the package names you registered for it, so ask Payriff to allow `com.payriff.example.android`. The example's defaults come from `local.properties` in the repository root, which is git-ignored (start from `local.properties.example`), and are compiled into the debug build only:
+The example holds no secret key and creates no orders: your server creates the order with its secret key (`POST /api/v3/orders`) and returns `orderId` and `clientSecret`. Payriff accepts the publishable key only from the package names you registered for it, so ask Payriff to allow `com.payriff.example.android`. The publishable key and the environment come from `local.properties` in the repository root, which is git-ignored (start from `local.properties.example`), and are compiled into the debug build only; without a key the screen says how to add one:
 
 ```properties
 payriff.publishableKey=
 payriff.environment=SANDBOX
 ```
 
-Values entered in the Settings screen override them and are kept in the app's private storage (backups are disabled).
+SDK logging is on, so the SDK's lines appear in Logcat (tag `Payriff`). The example keeps the SDK's security defaults: its connections to Payriff are pinned, so a proxy such as Charles or Burp makes them fail, and on a rooted device, or with Frida or Xposed loaded, the payment view says that card payments aren't available on this device. To pay from such a test device anyway, add `allowCompromisedDevices = true` to `ExampleSettings.config` for that run.
 
 ```bash
 ./gradlew :sample:installDebug
@@ -524,7 +538,9 @@ Values entered in the Settings screen override them and are kept in the app's pr
 | `Failed(ORDER_NOT_PAYABLE)` | The order was already paid, cancelled or expired, or card payments are not enabled for it. |
 | `Failed(VALIDATION_FAILED)` | The form shows what to fix under each field; `error.fields` lists the same. |
 | `Failed(PRESENTATION_FAILED)` | The payment view is not shown in a `ComponentActivity` (for example an `AppCompatActivity`) or in one of its fragments or dialogs, or Android System WebView is missing or disabled. |
-| Pay stays disabled in the payment view | The order is still loading, cannot be paid by card or did not load (the error line under the button says why), or the card form is not complete yet. |
+| Pay stays disabled in the payment view | The order is still loading, cannot be paid by card or did not load (the error line under the button says why), the card form is not complete yet, or the device failed the integrity check (see the next row). |
+| `Failed(DEVICE_COMPROMISED)`, or Pay disabled with "Card payments aren't available on this device" | The device looks rooted, a hooking framework (Frida, Xposed) is loaded, or the check could not complete. With `enableLogging = true` a warning names the signals, for example `Magisk` or `check failed`. For development on such a device, set `PayriffConfig(allowCompromisedDevices = true)`; never ship it on. |
+| `Failed(NETWORK_ERROR)` with "Payriff's server certificate could not be verified" | A debugging proxy (or a device with an injected CA) is intercepting TLS. Certificate pinning refuses it; remove the proxy. Debug builds log requests and responses, so you do not need to proxy to see the traffic. |
 | `Pending(NOT_FINAL)` | The status was not final in time, or the customer closed the 3-D Secure sheet. Confirm it on your backend; Payriff's callback will arrive there. |
 | Screenshots or screen recordings of the form are black | That is the screen protection (`FLAG_SECURE`). For QA in a debug build, set `allowScreenCaptureInDebug = true`. |
 | `IllegalStateException: LifecycleOwner … is attempting to register while current state is RESUMED` | Create `PayriffCardPaymentLauncher` while the activity or fragment is created, not in a click handler. |

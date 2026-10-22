@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Backups and device transfers are off: the example's settings stay on this device. -->
+    <!-- Backups and device transfers are off: nothing of the example leaves the device. -->
     <application
         android:name=".ExampleApp"
         android:allowBackup="false"
@@ -13,9 +13,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.PayriffExample"
         tools:targetApi="31">
-        <!-- The main screen, "Card (native)": the order, the card form and the SDK log. -->
+        <!-- The only screen: the order from your backend and three ways to show the payment view. -->
         <activity
-            android:name=".CardActivity"
+            android:name=".MainActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -23,15 +23,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <!-- PayriffPaymentView, the SDK's ready-made payment screen, opened from the main screen. -->
+        <!-- "Pay in page": PayriffPaymentView on a screen of its own. -->
         <activity
             android:name=".PaymentActivity"
             android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
-        <activity
-            android:name=".SettingsActivity"
-            android:exported="false"
-            android:label="@string/settings_title"
+            android:label="@string/payment_title"
+            android:theme="@style/Theme.PayriffExample.Payment"
             android:windowSoftInputMode="adjustResize" />
     </application>
 </manifest>

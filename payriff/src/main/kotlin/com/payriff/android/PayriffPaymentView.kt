@@ -18,6 +18,7 @@ import androidx.activity.result.ActivityResultRegistryOwner
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.payriff.android.internal.DeviceIntegrityGuard
 import com.payriff.android.internal.PayriffLog
 import com.payriff.android.internal.card.CardFormStyles
 import com.payriff.android.internal.card.CardStrings
@@ -72,9 +73,10 @@ import kotlin.math.roundToInt
  * works edge to edge; when a parent already applies and consumes them, it adds nothing.
  *
  * [style] changes the colours, sizes and parts of the view ([PayriffPaymentViewStyle.showBadges],
- * [PayriffPaymentViewStyle.showSecureNote], [PayriffPaymentViewStyle.showPoweredBy]) and the form's look
- * ([PayriffPaymentViewStyle.formStyle], for example `PayriffCardFormStyle(showLabels = false)`). [PayriffCardForm] and
- * [PayriffCardPaymentLauncher] remain available to build your own screen.
+ * [PayriffPaymentViewStyle.showSecureNote], [PayriffPaymentViewStyle.showPoweredBy]), the Pay button's word and the
+ * secure line's text ([PayriffPaymentViewStyle.payButtonLabel], [PayriffPaymentViewStyle.secureNoteText]) and the form's
+ * look ([PayriffPaymentViewStyle.formStyle], for example `PayriffCardFormStyle(showLabels = false)`). [PayriffCardForm]
+ * and [PayriffCardPaymentLauncher] remain available to build your own screen.
  */
 public class PayriffPaymentView @JvmOverloads constructor(
     context: Context,
@@ -133,7 +135,10 @@ public class PayriffPaymentView @JvmOverloads constructor(
 
     private val waitingResults = ArrayList<PayriffResult>()
     private var night = isNight(resources.configuration)
-    private var textLanguage: PayriffLanguage? = null
+
+    /** The language and theme the footer was built for; it is built again when either changes. */
+    private var footerLanguage: PayriffLanguage? = null
+    private var footerNight: Boolean? = null
     private var launcher: PayriffCardPaymentLauncher? = null
     private var registry: ActivityResultRegistry? = null
     private var launcherKey: String? = null
@@ -143,6 +148,8 @@ public class PayriffPaymentView @JvmOverloads constructor(
         loadOrder = { orderId, clientSecret -> Payriff.retrieveOrder(orderId, clientSecret) },
         onStateChanged = { render() },
         deliver = { result -> deliver(result) },
+        // CONTRACT §16.16: a compromised device shows view.deviceNotSupported, keeps Pay off and skips the order load.
+        deviceBlock = { DeviceIntegrityGuard.blockReason(context, Payriff.config) },
     )
 
     init {
@@ -256,7 +263,7 @@ public class PayriffPaymentView @JvmOverloads constructor(
         errorLine.applyTextStyle(CardFormStyles.resolve(s.formStyle, night, density()).error)
         payButton.apply(
             color = s.buttonColor ?: PaymentViewPlan.BUTTON_COLOR,
-            text = CardFormStyles.resolveText(s.buttonTextStyle, PaymentViewPlan.BUTTON_TEXT_COLOR),
+            text = PaymentViewPlan.buttonText(s),
             minHeightPx = CardFormStyles.px(s.buttonHeight, density()),
             cornerRadiusPx = CardFormStyles.size(s.buttonCornerRadius) * density(),
         )
@@ -274,12 +281,17 @@ public class PayriffPaymentView @JvmOverloads constructor(
         applyTexts()
     }
 
-    /** The copy in the effective language (the form's), then the state. */
+    /**
+     * The copy in the effective language (the form's) or the style's own text, and the footer with the logo of the
+     * theme; then the state.
+     */
     private fun applyTexts() {
         val language = form.effectiveLanguage()
-        if (language != textLanguage) {
-            textLanguage = language
-            secureText.text = CardStrings.view(language, CardStrings.VIEW_SECURE)
+        val secure = PaymentViewPlan.secureText(language, style)
+        if (secureText.text.toString() != secure) secureText.text = secure
+        if (language != footerLanguage || night != footerNight) {
+            footerLanguage = language
+            footerNight = night
             footer.text = poweredBy(language)
         }
         render()
@@ -291,7 +303,7 @@ public class PayriffPaymentView @JvmOverloads constructor(
         val language = form.effectiveLanguage()
         state.isFormComplete = form.isComplete
         state.isFormProcessing = form.isProcessing
-        payButton.title = state.payTitle(language)
+        payButton.title = state.payTitle(language, style.payButtonLabel)
         payButton.isBusy = state.isBusy
         payButton.isEnabled = state.isPayEnabled
         val error = state.errorMessage(language)
@@ -401,11 +413,14 @@ public class PayriffPaymentView @JvmOverloads constructor(
         scroll.layoutParams = params
     }
 
-    /** `view.poweredBy` with the Payriff logo (82×16 dp) in place of "Payriff". */
+    /**
+     * `view.poweredBy` with the Payriff logo (82×16 dp) in place of "Payriff": `payriff_logo`, or `payriff_logo_dark`
+     * with a light wordmark in the dark theme (CONTRACT §16.14).
+     */
     private fun poweredBy(language: PayriffLanguage): CharSequence {
         val text = CardStrings.view(language, CardStrings.VIEW_POWERED_BY)
         val parts = PaymentViewPlan.poweredByParts(language) ?: return text
-        val asset = PaymentViewAsset.LOGO
+        val asset = PaymentViewAsset.logo(night)
         val logo = ContextCompat.getDrawable(context, asset.resId) ?: return text
         val start = parts.first.length
         return SpannableString(text).apply {

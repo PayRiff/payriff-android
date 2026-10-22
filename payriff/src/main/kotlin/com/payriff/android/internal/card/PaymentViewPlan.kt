@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import com.payriff.android.PayriffClientOrder
 import com.payriff.android.PayriffLanguage
 import com.payriff.android.PayriffPaymentViewStyle
+import com.payriff.android.PayriffTextStyle
 import com.payriff.android.R
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -55,9 +56,10 @@ internal object PaymentViewPlan {
     const val BACKGROUND_LIGHT = 0xFFFCFCFD.toInt()
     const val BACKGROUND_DARK = 0xFF222224.toInt()
 
-    /** The Pay button: Payriff's brand colour and a white title. */
+    /** The Pay button: Payriff's brand colour and a white title, 16 sp semibold. */
     const val BUTTON_COLOR = CardFormStyles.FOCUS
     const val BUTTON_TEXT_COLOR = 0xFFFFFFFF.toInt()
+    const val BUTTON_TEXT_SIZE_SP = 16f
 
     /** The secure line and the footer: 12 sp regular in `#76787F`. */
     const val SECONDARY_TEXT_COLOR = 0xFF76787F.toInt()
@@ -89,21 +91,38 @@ internal object PaymentViewPlan {
     fun footer(style: PayriffPaymentViewStyle): Item? = if (style.showPoweredBy) Item(Part.POWERED_BY, FOOTER_GAP_DP) else null
 
     /**
-     * The Pay button's title: `view.pay`, then the amount with 2 decimals and `.` as the separator, then the currency,
-     * for example "Pay 1.02 AZN". Only `view.pay` while the amount is unknown.
+     * The Pay button's title: `view.pay` (or the style's [label], trimmed), then the amount with 2 decimals and `.` as
+     * the separator, then the currency, for example "Pay 1.02 AZN". Only the word while the amount is unknown. A `null`
+     * or blank [label] keeps `view.pay` (CONTRACT §16.14 "Text overrides").
      */
-    fun payTitle(language: PayriffLanguage, order: PayriffClientOrder?): String {
-        val pay = CardStrings.view(language, CardStrings.VIEW_PAY)
+    fun payTitle(language: PayriffLanguage, order: PayriffClientOrder?, label: String? = null): String {
+        val pay = label?.trim()?.takeIf { it.isNotEmpty() } ?: CardStrings.view(language, CardStrings.VIEW_PAY)
         val amount = order?.amount ?: return pay
         val currency = order.currency?.trim().orEmpty()
         return listOf(pay, amountText(amount), currency).filter { it.isNotEmpty() }.joinToString(" ")
     }
+
+    /**
+     * The text of the secure line: the style's [PayriffPaymentViewStyle.secureNoteText] as it is, or `view.secure` in
+     * [language] when it is `null` or blank (CONTRACT §16.14 "Text overrides").
+     */
+    fun secureText(language: PayriffLanguage, style: PayriffPaymentViewStyle): String =
+        style.secureNoteText?.takeIf { it.isNotBlank() } ?: CardStrings.view(language, CardStrings.VIEW_SECURE)
+
+    /** The Pay button's title style: [PayriffPaymentViewStyle.buttonTextStyle] merged over 16 sp semibold, white. */
+    fun buttonText(style: PayriffPaymentViewStyle): ResolvedTextStyle = CardFormStyles.resolveText(
+        style.buttonTextStyle,
+        ResolvedTextStyle(BUTTON_TEXT_SIZE_SP, PayriffTextStyle.SEMIBOLD, null, BUTTON_TEXT_COLOR),
+    )
 
     /** An amount as on Payriff's payment page: 2 decimals, `.` as the separator, no grouping, rounded half up. */
     fun amountText(amount: BigDecimal): String = amount.setScale(2, RoundingMode.HALF_UP).toPlainString()
 
     /** The error line of an order that loaded but cannot be paid by card: `view.notPayable` in [language]. */
     fun notPayableMessage(language: PayriffLanguage): String = CardStrings.view(language, CardStrings.VIEW_NOT_PAYABLE)
+
+    /** The error line on a compromised device (CONTRACT §16.16): `view.deviceNotSupported` in [language]. */
+    fun deviceNotSupportedMessage(language: PayriffLanguage): String = CardStrings.view(language, CardStrings.VIEW_DEVICE_NOT_SUPPORTED)
 
     /**
      * `view.poweredBy` split at "Payriff", where the logo goes: the text before and after it, for example
@@ -156,8 +175,8 @@ internal object LockGlyph {
 }
 
 /**
- * The images of [com.payriff.android.PayriffPaymentView] (CONTRACT §16.14), from Payriff's hosted payment page:
- * `spec/assets/payment-view` as `drawable-mdpi`, `-xhdpi` and `-xxhdpi` PNGs (1x, 2x, 3x).
+ * The images of [com.payriff.android.PayriffPaymentView] (CONTRACT §16.14), from `spec/assets/payment-view`: the 1x, 2x
+ * and 3x PNGs as `drawable-mdpi`, `-xhdpi` and `-xxhdpi`, and a 1.5x `drawable-hdpi` PNG made from them.
  *
  * @property resourceName The drawable's name, the same in every density folder.
  * @property widthDp The size in dp (the mdpi file's size in pixels).
@@ -172,7 +191,12 @@ internal enum class PaymentViewAsset(
 ) {
     MASTERCARD(R.drawable.payriff_badge_mastercard, "payriff_badge_mastercard", 43, 28, "Mastercard"),
     VISA(R.drawable.payriff_badge_visa, "payriff_badge_visa", 42, 28, "Visa"),
+
+    /** The "Powered by" logo in the light theme, from the hosted page. */
     LOGO(R.drawable.payriff_logo, "payriff_logo", 82, 16, "Payriff"),
+
+    /** The same logo for the dark theme: the wordmark in `#E1E4E8` instead of `#005687`, the mark unchanged. */
+    LOGO_DARK(R.drawable.payriff_logo_dark, "payriff_logo_dark", 82, 16, "Payriff"),
     ;
 
     companion object {
@@ -181,6 +205,9 @@ internal enum class PaymentViewAsset(
          * logo: PCI SSC does not allow the "PCI ✓" mark (CONTRACT §16.14).
          */
         val BADGES: List<PaymentViewAsset> = listOf(MASTERCARD, VISA)
+
+        /** The footer's logo: [LOGO] in the light theme, [LOGO_DARK] in the dark one ([night]). */
+        fun logo(night: Boolean): PaymentViewAsset = if (night) LOGO_DARK else LOGO
     }
 }
 

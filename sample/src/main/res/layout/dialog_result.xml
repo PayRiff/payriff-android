@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The outcome of a card payment: a big icon and title, the amount, the details and the result JSON. -->
+<!-- The outcome of a payment: a big icon and title, the amount, the details and the result JSON. -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -35,7 +35,7 @@
             android:layout_marginTop="16dp"
             android:accessibilityHeading="true"
             android:gravity="center"
-            android:textAppearance="@android:style/TextAppearance.Material.Headline"
+            android:textAppearance="?attr/textAppearanceHeadlineSmall"
             tools:targetApi="28"
             tools:text="@string/result_success" />
 
@@ -45,7 +45,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
             android:gravity="center"
-            android:textAppearance="@android:style/TextAppearance.Material.Title"
+            android:textAppearance="?attr/textAppearanceTitleMedium"
             tools:text="1.00 AZN" />
 
         <TextView
@@ -59,7 +59,7 @@
 
         <TextView
             android:id="@+id/resultDetails"
-            style="@style/Example.Card"
+            style="@style/Example.Code"
             android:layout_marginTop="16dp"
             tools:text="Order id: o1" />
 
@@ -70,7 +70,7 @@
 
         <TextView
             android:id="@+id/resultJson"
-            style="@style/Example.Card"
+            style="@style/Example.Code"
             android:textSize="11sp"
             tools:text="{}" />
     </LinearLayout>

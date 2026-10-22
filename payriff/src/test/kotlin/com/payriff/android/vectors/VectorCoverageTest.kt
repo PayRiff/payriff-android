@@ -70,6 +70,14 @@ class VectorCoverageTest {
             ),
             "card_next_action.json" to cases("CardNavigationVectorsTest.everyNextActionCase"),
             "card_strings.json" to mapOf("description" to "-", "messages" to "CardValidationVectorsTest.stringTableEqualsCardStringsJson"),
+            "tls_pins.json" to mapOf(
+                "description" to "-",
+                "hosts" to "CertificatePinningTest.theHostsAndPinsEqualTheVector",
+                "pins" to "CertificatePinningTest.theHostsAndPinsEqualTheVector",
+                "trustAnchors" to "CertificatePinningTest.everyTrustAnchorIsAPinnedKey",
+                "currentChain" to "CertificatePinningTest.theCurrentChainPassesAndTheInterceptedChainIsRefused",
+                "interceptedChain" to "CertificatePinningTest.theCurrentChainPassesAndTheInterceptedChainIsRefused",
+            ),
             "card_validation.json" to mapOf(
                 "description" to "-",
                 "brands" to "CardValidationVectorsTest.brandsAndLimits",

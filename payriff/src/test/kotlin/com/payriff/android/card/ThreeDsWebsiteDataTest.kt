@@ -65,7 +65,50 @@ class ThreeDsWebsiteDataTest {
             "intent://pay#Intent;end", "bankapp://confirm", "file:///sdcard/x", "https:///path", "https://bank.az:99999/",
         )
         for (url in notWebPages) assertNull(url, ThreeDsWebsiteData.originOf(url))
-        assertEquals("https://acs.bank.az/", ThreeDsWebsiteData.cookieUrl("https://acs.bank.az"))
+    }
+
+    @Test
+    fun theCookiePathIsEveryPrefixOfTheUrlsPathWithAndWithoutItsSlash() {
+        assertEquals("/", ThreeDsWebsiteData.normalizePath(""))
+        assertEquals("/acs", ThreeDsWebsiteData.normalizePath("/acs"))
+        assertEquals(listOf("/"), ThreeDsWebsiteData.pathPrefixes("/"))
+        assertEquals(listOf("/"), ThreeDsWebsiteData.pathPrefixes(""))
+        // A prefix the path goes on from with a "/" is expired with and without that "/" (CONTRACT §9.1a).
+        assertEquals(listOf("/", "/acs", "/acs/", "/acs/challenge"), ThreeDsWebsiteData.pathPrefixes("/acs/challenge"))
+        assertEquals(
+            listOf("/", "/acs", "/acs/", "/acs/challenge", "/acs/challenge/"),
+            ThreeDsWebsiteData.pathPrefixes("/acs/challenge/"),
+        )
+        assertEquals("a trailing slash is kept", listOf("/", "/acs", "/acs/"), ThreeDsWebsiteData.pathPrefixes("/acs/"))
+        assertEquals(listOf("/", "/a", "/a/", "/a/b", "/a/b/", "/a/b/c"), ThreeDsWebsiteData.pathPrefixes("/a/b/c"))
+        // Only real prefixes of the raw path: an empty segment stays, and the path is not decoded.
+        assertEquals(listOf("/", "/a", "/a/", "/a//", "/a//b"), ThreeDsWebsiteData.pathPrefixes("/a//b"))
+        assertEquals(
+            listOf("/", "/3ds%20v2", "/3ds%20v2/", "/3ds%20v2/step"),
+            ThreeDsWebsiteData.pathPrefixes("/3ds%20v2/step"),
+        )
+        assertEquals("not a path", listOf("/"), ThreeDsWebsiteData.pathPrefixes("relative/path"))
+    }
+
+    @Test
+    fun theTrailingSlashFormsAreExpiredAsInTheFlutterSdk() {
+        // The same setCookie values, in the same order, as the Flutter SDK expires for this URL (its WebsiteDataTest).
+        val data = ThreeDsWebsiteData()
+        data.record("https://acs.bank.example/acs/challenge?creq=x")
+        val platform = FakePlatform(cookies = mapOf("https://acs.bank.example/acs/challenge" to "sid=1"))
+        data.clear(platform)
+        val expected = listOf("/", "/acs", "/acs/", "/acs/challenge").flatMap { path ->
+            listOf(
+                "sid=; Max-Age=0; Path=$path; Secure",
+                "sid=; Max-Age=0; Path=$path; Domain=acs.bank.example; Secure",
+                "sid=; Max-Age=0; Path=$path; Domain=bank.example; Secure",
+            )
+        }
+        assertEquals(
+            expected.map { "setCookie https://acs.bank.example/acs/challenge $it" },
+            platform.calls.filter { it.startsWith("setCookie") },
+        )
+        assertFalse("not a prefix of the path", platform.calls.any { "Path=/acs/challenge/" in it })
     }
 
     @Test
@@ -116,13 +159,14 @@ class ThreeDsWebsiteDataTest {
 
     @Test
     fun aCookieIsExpiredHostOnlyAndForTheHostAndEachParentDomain() {
+        // Path=/ on an http page: host-only, then each domain, with no Secure.
         assertEquals(
             listOf(
                 "JSESSIONID=; Max-Age=0; Path=/",
                 "JSESSIONID=; Max-Age=0; Path=/; Domain=acs.bank.az",
                 "JSESSIONID=; Max-Age=0; Path=/; Domain=bank.az",
             ),
-            ThreeDsWebsiteData.expiryCookies("JSESSIONID", "acs.bank.az"),
+            ThreeDsWebsiteData.expiryCookies("JSESSIONID", "acs.bank.az", listOf("/"), secure = false),
         )
         assertEquals(listOf("a", "b", "c"), ThreeDsWebsiteData.cookieNames("a=1; b=x=y;c=; a=2"))
         assertEquals(listOf("sid"), ThreeDsWebsiteData.cookieNames(" sid = v ; =orphan; nameless"))
@@ -131,24 +175,52 @@ class ThreeDsWebsiteDataTest {
     }
 
     @Test
+    fun anHttpsCookieIsExpiredForEveryPathPrefixWithSecure() {
+        // Every path prefix, host-only then each domain, with "; Secure" for an https URL (CONTRACT §9.1a).
+        assertEquals(
+            listOf(
+                "sid=; Max-Age=0; Path=/; Secure",
+                "sid=; Max-Age=0; Path=/; Domain=acs.bank.az; Secure",
+                "sid=; Max-Age=0; Path=/; Domain=bank.az; Secure",
+                "sid=; Max-Age=0; Path=/acs; Secure",
+                "sid=; Max-Age=0; Path=/acs; Domain=acs.bank.az; Secure",
+                "sid=; Max-Age=0; Path=/acs; Domain=bank.az; Secure",
+            ),
+            ThreeDsWebsiteData.expiryCookies("sid", "acs.bank.az", listOf("/", "/acs"), secure = true),
+        )
+        // A __Secure- cookie goes with the Secure flag like any other; a __Host- cookie is only host-only, Path=/, Secure.
+        assertEquals(
+            listOf("__Secure-sid=; Max-Age=0; Path=/; Secure", "__Secure-sid=; Max-Age=0; Path=/; Domain=bank.az; Secure"),
+            ThreeDsWebsiteData.expiryCookies("__Secure-sid", "bank.az", listOf("/"), secure = true),
+        )
+        assertEquals(
+            listOf("__Host-sid=; Max-Age=0; Path=/; Secure"),
+            ThreeDsWebsiteData.expiryCookies("__Host-sid", "acs.bank.az", listOf("/", "/acs"), secure = true),
+        )
+    }
+
+    @Test
     fun clearingRemovesWebStorageThenCookiesThenFlushes() {
         val data = ThreeDsWebsiteData()
-        data.record("https://acs.bank.az/acs/challenge")
-        data.record("https://api.payriff.com:8443/api/v3/gateway/kapital/callback/ORD-1")
-        val platform = FakePlatform(cookies = mapOf("https://acs.bank.az/" to "sid=1; lang=az", "https://api.payriff.com:8443/" to null))
+        // Recorded with its path: cookies are expired at the page URL for every path prefix, with Secure (https).
+        data.record("https://acs.bank.az/acs?creq=x")
+        data.record("https://api.payriff.com:8443/callback/ORD-1")
+        val platform = FakePlatform(
+            cookies = mapOf("https://acs.bank.az/acs" to "sid=1", "https://api.payriff.com:8443/callback/ORD-1" to null),
+        )
         data.clear(platform)
         assertEquals(
             listOf(
                 "deleteOrigin https://acs.bank.az",
                 "deleteOrigin https://api.payriff.com:8443",
-                "getCookie https://acs.bank.az/",
-                "setCookie https://acs.bank.az/ sid=; Max-Age=0; Path=/",
-                "setCookie https://acs.bank.az/ sid=; Max-Age=0; Path=/; Domain=acs.bank.az",
-                "setCookie https://acs.bank.az/ sid=; Max-Age=0; Path=/; Domain=bank.az",
-                "setCookie https://acs.bank.az/ lang=; Max-Age=0; Path=/",
-                "setCookie https://acs.bank.az/ lang=; Max-Age=0; Path=/; Domain=acs.bank.az",
-                "setCookie https://acs.bank.az/ lang=; Max-Age=0; Path=/; Domain=bank.az",
-                "getCookie https://api.payriff.com:8443/",
+                "getCookie https://acs.bank.az/acs",
+                "setCookie https://acs.bank.az/acs sid=; Max-Age=0; Path=/; Secure",
+                "setCookie https://acs.bank.az/acs sid=; Max-Age=0; Path=/; Domain=acs.bank.az; Secure",
+                "setCookie https://acs.bank.az/acs sid=; Max-Age=0; Path=/; Domain=bank.az; Secure",
+                "setCookie https://acs.bank.az/acs sid=; Max-Age=0; Path=/acs; Secure",
+                "setCookie https://acs.bank.az/acs sid=; Max-Age=0; Path=/acs; Domain=acs.bank.az; Secure",
+                "setCookie https://acs.bank.az/acs sid=; Max-Age=0; Path=/acs; Domain=bank.az; Secure",
+                "getCookie https://api.payriff.com:8443/callback/ORD-1",
                 "flush",
             ),
             platform.calls,
@@ -169,7 +241,12 @@ class ThreeDsWebsiteDataTest {
         data.record("https://bank.az/")
         val platform = FakePlatform(
             cookies = mapOf("https://acs.bank.az/" to "sid=1", "https://bank.az/" to "id=2"),
-            failing = setOf("deleteOrigin https://acs.bank.az", "getCookie https://acs.bank.az/", "setCookie https://bank.az/ id=; Max-Age=0; Path=/", "flush"),
+            failing = setOf(
+                "deleteOrigin https://acs.bank.az",
+                "getCookie https://acs.bank.az/",
+                "setCookie https://bank.az/ id=; Max-Age=0; Path=/; Secure",
+                "flush",
+            ),
         )
         data.clear(platform)
         assertEquals(
@@ -178,8 +255,8 @@ class ThreeDsWebsiteDataTest {
                 "deleteOrigin https://bank.az",
                 "getCookie https://acs.bank.az/",
                 "getCookie https://bank.az/",
-                "setCookie https://bank.az/ id=; Max-Age=0; Path=/",
-                "setCookie https://bank.az/ id=; Max-Age=0; Path=/; Domain=bank.az",
+                "setCookie https://bank.az/ id=; Max-Age=0; Path=/; Secure",
+                "setCookie https://bank.az/ id=; Max-Age=0; Path=/; Domain=bank.az; Secure",
                 "flush",
             ),
             platform.calls,

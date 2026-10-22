@@ -9,6 +9,7 @@ import androidx.activity.result.ActivityResultRegistry
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.LifecycleOwner
+import com.payriff.android.internal.DeviceIntegrityGuard
 import com.payriff.android.internal.PaymentGuard
 import com.payriff.android.internal.PayriffLog
 import com.payriff.android.internal.card.CardApiClient
@@ -145,6 +146,8 @@ public class PayriffCardPaymentLauncher private constructor(
         if (pending != null) return fail(PaymentGuard.inProgressError())
         PaymentGuard.busyError()?.let { return fail(it) }
         Payriff.onContextAvailable(form.context)
+        // CONTRACT §16.16: refuse a compromised device before anything is sent (unless allowCompromisedDevices is on).
+        DeviceIntegrityGuard.blockReason(form.context, Payriff.config)?.let { return fail(it) }
         val (id, credentials) = try {
             CardSetup.orderId(orderId) to CardSetup.credentials(Payriff.config, clientSecret)
         } catch (error: PayriffError) {
@@ -168,6 +171,8 @@ public class PayriffCardPaymentLauncher private constructor(
         val confirmation = CardConfirmation(
             api = CardApiClient(credentials, Payriff.transport()),
             encrypt = { plaintext -> withContext(Dispatchers.Default) { CardCrypto.encrypt(plaintext, CardCrypto.payriffPublicKey()) } },
+            // CONTRACT §16.16: a fresh runtime check right before encryption; a compromised device fails the payment.
+            recheckDevice = { DeviceIntegrityGuard.blockReason(form.context, Payriff.config)?.let { throw it } },
         )
         val job = scope.launch {
             try {

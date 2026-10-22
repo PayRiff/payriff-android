@@ -25,6 +25,10 @@ package com.payriff.android
  * @property allowScreenCaptureInDebug Debug builds only: lets screenshots and screen recordings capture the card form
  *   and the 3-D Secure sheet, for example for QA. They are otherwise protected with `FLAG_SECURE`. Release builds ignore
  *   it and always protect them. Defaults to `false`.
+ * @property allowCompromisedDevices Lets card payments run on a rooted device, when a hooking framework is detected,
+ *   or when the check cannot complete ([Payriff.isDeviceCompromised], CONTRACT §16.16). The default (`false`) refuses
+ *   them with [PayriffErrorCode.DEVICE_COMPROMISED]; `true` only logs a warning. Turn it on **only for development** on
+ *   rooted or hooked test devices, never in a shipped build.
  */
 public class PayriffConfig(
     publishableKey: String? = null,
@@ -32,6 +36,7 @@ public class PayriffConfig(
     public val language: PayriffLanguage? = null,
     public val enableLogging: Boolean = false,
     public val allowScreenCaptureInDebug: Boolean = false,
+    public val allowCompromisedDevices: Boolean = false,
 ) {
     /**
      * Publishable key (`pr_pk_live_…`) of the card flow ([PayriffCardForm], [PayriffCardPaymentLauncher],
@@ -47,11 +52,13 @@ public class PayriffConfig(
         .language(language)
         .enableLogging(enableLogging)
         .allowScreenCaptureInDebug(allowScreenCaptureInDebug)
+        .allowCompromisedDevices(allowCompromisedDevices)
 
     /** Describes the configuration with the publishable key redacted as `pr_pk_live_***(<length>)`, so it is safe to log. */
     override fun toString(): String =
         "PayriffConfig(publishableKey=${publishableKey?.let(::redactPublishableKey)}, environment=$environment, " +
-            "language=$language, enableLogging=$enableLogging, allowScreenCaptureInDebug=$allowScreenCaptureInDebug)"
+            "language=$language, enableLogging=$enableLogging, allowScreenCaptureInDebug=$allowScreenCaptureInDebug, " +
+            "allowCompromisedDevices=$allowCompromisedDevices)"
 
     /** Java-friendly builder for [PayriffConfig]. Every setter mirrors the constructor parameter of the same name. */
     public class Builder {
@@ -60,6 +67,7 @@ public class PayriffConfig(
         private var language: PayriffLanguage? = null
         private var enableLogging: Boolean = false
         private var allowScreenCaptureInDebug: Boolean = false
+        private var allowCompromisedDevices: Boolean = false
 
         /** Sets [PayriffConfig.publishableKey]. */
         public fun publishableKey(value: String?): Builder = apply { publishableKey = value }
@@ -76,6 +84,9 @@ public class PayriffConfig(
         /** Sets [PayriffConfig.allowScreenCaptureInDebug]. Debug builds only. */
         public fun allowScreenCaptureInDebug(value: Boolean): Builder = apply { allowScreenCaptureInDebug = value }
 
+        /** Sets [PayriffConfig.allowCompromisedDevices]. For development only. */
+        public fun allowCompromisedDevices(value: Boolean): Builder = apply { allowCompromisedDevices = value }
+
         /** Creates the configuration. Never throws; see [PayriffConfig] for validation. */
         public fun build(): PayriffConfig = PayriffConfig(
             publishableKey = publishableKey,
@@ -83,6 +94,7 @@ public class PayriffConfig(
             language = language,
             enableLogging = enableLogging,
             allowScreenCaptureInDebug = allowScreenCaptureInDebug,
+            allowCompromisedDevices = allowCompromisedDevices,
         )
     }
 

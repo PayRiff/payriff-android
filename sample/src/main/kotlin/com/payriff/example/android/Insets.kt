@@ -19,3 +19,11 @@ fun applySystemInsets(root: View) {
         WindowInsetsCompat.CONSUMED
     }
 }
+
+/**
+ * Stops the window insets at [view]. A bottom sheet or a dialog makes room for the system bars and the keyboard itself,
+ * so the payment view inside it must not add them again.
+ */
+fun consumeSystemInsets(view: View) {
+    ViewCompat.setOnApplyWindowInsetsListener(view) { _, _ -> WindowInsetsCompat.CONSUMED }
+}

@@ -1,8 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.PayriffExample" parent="@android:style/Theme.Material.Light.NoActionBar">
-        <item name="android:colorPrimary">@color/brand</item>
-        <item name="android:colorAccent">@color/brand</item>
+    <!-- Material 3, light or dark with the system. Neutral surfaces, so the dialogs are not tinted. -->
+    <style name="Theme.PayriffExample" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/brand</item>
+        <item name="colorOnPrimary">@color/on_brand</item>
+        <item name="colorSurface">@color/background</item>
+        <item name="colorSurfaceContainerHigh">@color/card</item>
         <item name="android:windowBackground">@color/background</item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.PayriffExample.BottomSheetDialog</item>
+    </style>
+
+    <!-- "Pay in page": the payment view's background behind the toolbar and the system bars. -->
+    <style name="Theme.PayriffExample.Payment">
+        <item name="android:windowBackground">@color/payment_background</item>
+    </style>
+
+    <!-- "Pay in bottom sheet": the payment view's background and 16 dp top corners, like the Flutter example. -->
+    <style name="ThemeOverlay.PayriffExample.BottomSheetDialog" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/Widget.PayriffExample.BottomSheet</item>
+    </style>
+
+    <style name="Widget.PayriffExample.BottomSheet" parent="Widget.Material3.BottomSheet.Modal">
+        <item name="backgroundTint">@color/payment_background</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.PayriffExample.Sheet</item>
+    </style>
+
+    <style name="ShapeAppearance.PayriffExample.Sheet" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">16dp</item>
     </style>
 </resources>
