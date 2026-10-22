@@ -47,6 +47,9 @@ import kotlinx.coroutines.CoroutineScope
  * WebView side of [ThreeDsFlow]: the navigation policy runs in `shouldOverrideUrlLoading`, again when a main-frame page
  * starts (POST navigations and their redirects skip `shouldOverrideUrlLoading`), and a main-frame request to Payriff's
  * gateway callback is noticed in `shouldInterceptRequest`, which also sees POSTs.
+ *
+ * The WebViews' page and frame requests are recorded in [ThreeDsWebsiteData]; when the sheet goes away, [dispose]
+ * removes their website data before it destroys the WebViews (CONTRACT §9.1a).
  */
 internal class CardSheetController(
     private val activity: PayriffActivity,
@@ -73,6 +76,7 @@ internal class CardSheetController(
     private val externalLauncher by lazy { ExternalLauncher(AndroidExternalApps(activity)) }
     private var mainWebView: WebView? = null
     private val hiddenWebViews = ArrayList<WebView>()
+    private val websiteData = ThreeDsWebsiteData()
     private var mainFrameUrl: String? = null
     private var disposed = false
 
@@ -86,14 +90,20 @@ internal class CardSheetController(
 
     fun onUserClose() = flow.onUserClose()
 
+    /**
+     * The sheet goes away: the payment ended, or the system destroyed the sheet, which then resumes without WebViews.
+     * The payment's website data is removed first, then the WebViews are destroyed. The result is already set, so this
+     * never blocks or changes it.
+     */
     fun dispose() {
         if (disposed) return
         disposed = true
         flow.dispose()
-        hiddenWebViews.toList().forEach(::destroyWebView)
+        val views = hiddenWebViews + listOfNotNull(mainWebView)
         hiddenWebViews.clear()
-        mainWebView?.let(::destroyWebView)
         mainWebView = null
+        websiteData.clear(AndroidWebsiteData)
+        destroyWebViews(views)
     }
 
     // region ThreeDsUi
@@ -127,7 +137,7 @@ internal class CardSheetController(
         val doomed = hiddenWebViews.toList()
         hiddenWebViews.clear()
         // Never destroy a WebView inside a WebView callback: post it.
-        mainHandler.post { doomed.forEach(::destroyWebView) }
+        mainHandler.post { destroyWebViews(doomed) }
     }
 
     override fun stopWebViews() {
@@ -219,6 +229,17 @@ internal class CardSheetController(
         return webView
     }
 
+    /**
+     * Destroys [views], which the sheet no longer tracks. When they are the payment's last WebViews and a page was
+     * loaded, the HTTP cache is cleared through one of them first (CONTRACT §9.1a); Android has one cache per app.
+     */
+    private fun destroyWebViews(views: List<WebView>) {
+        if (views.isEmpty()) return
+        val lastOfThePayment = mainWebView == null && hiddenWebViews.isEmpty()
+        if (lastOfThePayment && !websiteData.isEmpty) AndroidWebsiteData.clearCache(views.first())
+        views.forEach(::destroyWebView)
+    }
+
     private fun destroyWebView(webView: WebView) {
         webView.stopLoading()
         (webView.parent as? ViewGroup)?.removeView(webView)
@@ -250,7 +271,10 @@ internal class CardSheetController(
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
             val url = request.url.toString()
             return when (flow.onNavigation(url, request.isForMainFrame)) {
-                ThreeDsNav.ALLOW, ThreeDsNav.ALLOW_CALLBACK -> false
+                ThreeDsNav.ALLOW, ThreeDsNav.ALLOW_CALLBACK -> {
+                    websiteData.record(url)
+                    false
+                }
                 ThreeDsNav.FINISH, ThreeDsNav.BLOCK -> true
                 ThreeDsNav.EXTERNAL -> {
                     openExternal(url, view)
@@ -261,12 +285,17 @@ internal class CardSheetController(
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             mainFrameUrl = url
+            // The page was requested, even if the policy stops it now.
+            websiteData.record(url)
             applyStarted(view, url, flow.onNavigation(url, isMainFrame = true))
         }
 
         /** Runs on a WebView network thread. Observes only: returning `null` lets every request load unchanged. */
         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
-            if (flow.navigator.isCallback(request.url.toString())) {
+            val url = request.url.toString()
+            // Every main-frame request, POSTs included (CONTRACT §9.1a).
+            if (request.isForMainFrame) websiteData.record(url)
+            if (flow.navigator.isCallback(url)) {
                 if (request.isForMainFrame) {
                     flow.navigator.markCallback()
                     mainHandler.post { flow.onCallbackObserved() }
@@ -325,11 +354,22 @@ internal class CardSheetController(
                 ThreeDsNav.FINISH, ThreeDsNav.BLOCK, ThreeDsNav.EXTERNAL -> false
             }
 
-        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
-            !allowed(request.url.toString(), request.isForMainFrame)
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+            val url = request.url.toString()
+            if (!allowed(url, request.isForMainFrame)) return true
+            websiteData.record(url)
+            return false
+        }
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            websiteData.record(url)
             if (!allowed(url, isMainFrame = true)) view.stopLoading()
+        }
+
+        /** Runs on a WebView network thread. Records every main-frame request (CONTRACT §9.1a); nothing else changes. */
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+            if (request.isForMainFrame) websiteData.record(request.url.toString())
+            return null
         }
 
         override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {

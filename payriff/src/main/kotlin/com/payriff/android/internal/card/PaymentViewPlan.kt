@@ -67,9 +67,6 @@ internal object PaymentViewPlan {
     const val DISABLED_ALPHA = 0.5f
     const val PRESSED_ALPHA = 0.8f
 
-    /** The error line of an order that loaded but cannot be paid by card. */
-    const val NOT_PAYABLE_MESSAGE = "This order cannot be paid"
-
     /** The word of `view.poweredBy` that the Payriff logo replaces. */
     const val WORDMARK = "Payriff"
 
@@ -104,6 +101,9 @@ internal object PaymentViewPlan {
 
     /** An amount as on Payriff's payment page: 2 decimals, `.` as the separator, no grouping, rounded half up. */
     fun amountText(amount: BigDecimal): String = amount.setScale(2, RoundingMode.HALF_UP).toPlainString()
+
+    /** The error line of an order that loaded but cannot be paid by card: `view.notPayable` in [language]. */
+    fun notPayableMessage(language: PayriffLanguage): String = CardStrings.view(language, CardStrings.VIEW_NOT_PAYABLE)
 
     /**
      * `view.poweredBy` split at "Payriff", where the logo goes: the text before and after it, for example

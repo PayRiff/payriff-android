@@ -45,19 +45,19 @@ internal object PayriffStrings {
             "ru" to "Повторить",
         ),
         "cancel_confirm_title" to mapOf(
-            "az" to "Ödənişi ləğv edək?",
-            "en" to "Cancel payment?",
-            "ru" to "Отменить оплату?",
+            "az" to "Pəncərəni bağlayaq?",
+            "en" to "Close this window?",
+            "ru" to "Закрыть окно?",
         ),
         "cancel_confirm_message" to mapOf(
-            "az" to "Ödəniş hələ tamamlanmayıb. Pəncərəni bağlasanız, ödəniş ləğv olunacaq.",
-            "en" to "The payment isn't complete yet. If you close this window, the payment will be cancelled.",
-            "ru" to "Оплата ещё не завершена. Если закрыть окно, оплата будет отменена.",
+            "az" to "Ödəniş hələ tamamlanmayıb. Pəncərəni bağlasanız, ödənişin statusunu yoxlayacağıq.",
+            "en" to "The payment isn't finished yet. If you close this window, we'll check its status.",
+            "ru" to "Оплата ещё не завершена. Если закрыть окно, мы проверим её статус.",
         ),
         "cancel_confirm_yes" to mapOf(
-            "az" to "Ləğv et",
-            "en" to "Cancel payment",
-            "ru" to "Отменить",
+            "az" to "Bağla",
+            "en" to "Close",
+            "ru" to "Закрыть",
         ),
         "cancel_confirm_no" to mapOf(
             "az" to "Ödənişə davam et",

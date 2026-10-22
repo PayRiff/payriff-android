@@ -193,7 +193,16 @@ class PaymentViewTest {
         assertEquals("Proceed securely by PCI DSS", CardStrings.view(PayriffLanguage.EN, CardStrings.VIEW_SECURE))
         assertEquals("PCI DSS ilə təhlükəsiz ödəniş", CardStrings.view(PayriffLanguage.AZ, CardStrings.VIEW_SECURE))
         assertEquals("Безопасная оплата по PCI DSS", CardStrings.view(PayriffLanguage.RU, CardStrings.VIEW_SECURE))
-        assertEquals("This order cannot be paid", PaymentViewPlan.NOT_PAYABLE_MESSAGE)
+    }
+
+    @Test
+    fun theNotPayableLineIsInTheViewsLanguage() {
+        assertEquals("This order cannot be paid by card", PaymentViewPlan.notPayableMessage(PayriffLanguage.EN))
+        assertEquals("Bu sifarişi kartla ödəmək mümkün deyil", PaymentViewPlan.notPayableMessage(PayriffLanguage.AZ))
+        assertEquals("Этот заказ нельзя оплатить картой", PaymentViewPlan.notPayableMessage(PayriffLanguage.RU))
+        for (language in PayriffLanguage.entries) {
+            assertEquals(CardStrings.view(language, CardStrings.VIEW_NOT_PAYABLE), PaymentViewPlan.notPayableMessage(language))
+        }
     }
 
     // endregion
@@ -277,7 +286,7 @@ class PaymentViewTest {
         state.isFormComplete = true
         assertFalse("loading", state.isPayEnabled)
         assertEquals("Pay", state.payTitle(PayriffLanguage.EN))
-        assertNull(state.errorMessage)
+        assertNull(state.errorMessage(PayriffLanguage.EN))
         assertTrue(state.needsOrder)
 
         state.orderDidLoad(order(amount = "1.02"))
@@ -294,7 +303,7 @@ class PaymentViewTest {
         assertTrue("a spinner replaces the title", state.isBusy)
         state.paymentDidFinish(PayriffResult.Failed(PayriffError(PayriffErrorCode.PAYMENT_FAILED, "Insufficient funds", isRetryable = true)))
         assertTrue("the customer may try again", state.isPayEnabled)
-        assertNull(state.errorMessage)
+        assertNull(state.errorMessage(PayriffLanguage.EN))
 
         state.isFormProcessing = true
         assertFalse(state.isPayEnabled)
@@ -308,18 +317,21 @@ class PaymentViewTest {
             state.isFormComplete = true
             state.orderDidLoad(notPayable)
             assertFalse(state.isPayEnabled)
-            assertEquals("This order cannot be paid", state.errorMessage)
+            assertEquals("This order cannot be paid by card", state.errorMessage(PayriffLanguage.EN))
+            assertEquals("Bu sifarişi kartla ödəmək mümkün deyil", state.errorMessage(PayriffLanguage.AZ))
+            assertEquals("Этот заказ нельзя оплатить картой", state.errorMessage(PayriffLanguage.RU))
             assertEquals("Pay 1.02 AZN", state.payTitle(PayriffLanguage.EN))
         }
         val failed = PaymentViewState()
         failed.isFormComplete = true
         assertNull(failed.orderDidFail(PayriffError(PayriffErrorCode.NETWORK_ERROR, "No response from Payriff (offline or timed out).")))
         assertFalse(failed.isPayEnabled)
-        assertEquals("No response from Payriff (offline or timed out).", failed.errorMessage)
+        assertEquals("No response from Payriff (offline or timed out).", failed.errorMessage(PayriffLanguage.EN))
         assertEquals("Pay", failed.payTitle(PayriffLanguage.EN))
         assertTrue("a failure that is not fatal loads again when the view appears", failed.needsOrder)
         failed.orderDidFail(PayriffError(PayriffErrorCode.UNKNOWN, "  "))
-        assertEquals("This order cannot be paid", failed.errorMessage)
+        assertEquals("This order cannot be paid by card", failed.errorMessage(PayriffLanguage.EN))
+        assertEquals("Этот заказ нельзя оплатить картой", failed.errorMessage(PayriffLanguage.RU))
     }
 
     @Test
@@ -328,7 +340,7 @@ class PaymentViewTest {
         paid.paymentDidFinish(PayriffResult.Success(payment()))
         assertFalse(paid.isPayEnabled)
         assertTrue(paid.isFinished)
-        assertNull("no error line after a status", paid.errorMessage)
+        assertNull("no error line after a status", paid.errorMessage(PayriffLanguage.EN))
         val pending = payableState()
         pending.paymentDidFinish(PayriffResult.Pending(payment(), com.payriff.android.PayriffPendingReason.NOT_FINAL))
         assertFalse(pending.isPayEnabled)
@@ -336,18 +348,18 @@ class PaymentViewTest {
         val notPayable = payableState()
         notPayable.paymentDidFinish(PayriffResult.Failed(PayriffError(PayriffErrorCode.ORDER_NOT_PAYABLE, "The order cannot be paid (HTTP 400).")))
         assertFalse(notPayable.isPayEnabled)
-        assertEquals("The order cannot be paid (HTTP 400).", notPayable.errorMessage)
+        assertEquals("The order cannot be paid (HTTP 400).", notPayable.errorMessage(PayriffLanguage.EN))
 
         val expired = payableState()
         val fatal = PayriffError(PayriffErrorCode.SESSION_EXPIRED, "Order not found", isFatal = true)
         expired.paymentDidFinish(PayriffResult.Failed(fatal))
         assertFalse(expired.isPayEnabled)
-        assertEquals("Order not found", expired.errorMessage)
+        assertEquals("Order not found", expired.errorMessage(PayriffLanguage.EN))
         assertNull("a fatal error already reported through the payment is not reported again", expired.orderDidFail(fatal))
 
         // Another order starts afresh.
         expired.newOrder()
-        assertNull(expired.errorMessage)
+        assertNull(expired.errorMessage(PayriffLanguage.EN))
         assertTrue(expired.orderDidFail(fatal) is PayriffResult.Failed)
     }
 
@@ -422,7 +434,7 @@ class PaymentViewTest {
         val failed = view.delivered.single() as PayriffResult.Failed
         assertEquals(PayriffErrorCode.SESSION_EXPIRED, failed.error.code)
         assertTrue(failed.error.isFatal)
-        assertEquals("Order not found", view.state.errorMessage)
+        assertEquals("Order not found", view.state.errorMessage(PayriffLanguage.EN))
         assertFalse(view.state.isPayEnabled)
 
         view.controller.disappear()
@@ -452,7 +464,7 @@ class PaymentViewTest {
         view.controller.appear()
         advanceUntilIdle()
         assertTrue("not fatal: nothing reported", view.delivered.isEmpty())
-        assertEquals("No response from Payriff (offline or timed out).", view.state.errorMessage)
+        assertEquals("No response from Payriff (offline or timed out).", view.state.errorMessage(PayriffLanguage.EN))
         assertEquals("Pay", view.state.payTitle(PayriffLanguage.EN))
 
         view.controller.disappear()
@@ -460,7 +472,7 @@ class PaymentViewTest {
         advanceUntilIdle()
         assertEquals(2, api.requests.size)
         assertTrue(view.state.order is PaymentViewState.Order.Payable)
-        assertNull(view.state.errorMessage)
+        assertNull(view.state.errorMessage(PayriffLanguage.EN))
     }
 
     @Test
@@ -473,7 +485,7 @@ class PaymentViewTest {
         advanceUntilIdle()
         view.state.isFormComplete = true
         assertTrue(view.state.order is PaymentViewState.Order.NotPayable)
-        assertEquals("This order cannot be paid", view.state.errorMessage)
+        assertEquals("This order cannot be paid by card", view.state.errorMessage(PayriffLanguage.EN))
         assertEquals("Pay 10.50 AZN", view.state.payTitle(PayriffLanguage.EN))
         assertFalse(view.state.isPayEnabled)
         assertTrue(view.delivered.isEmpty())
@@ -493,13 +505,13 @@ class PaymentViewTest {
         view.controller.pay { _, _, done -> done(declinedByPayriff) }
         assertEquals(listOf<PayriffResult>(declinedByPayriff), view.delivered)
         assertTrue(view.state.isPayEnabled)
-        assertNull(view.state.errorMessage)
+        assertNull(view.state.errorMessage(PayriffLanguage.EN))
 
         val notPayable = PayriffResult.Failed(PayriffError(PayriffErrorCode.ORDER_NOT_PAYABLE, "The order cannot be paid by card: its status is APPROVED."))
         view.controller.pay { _, _, done -> done(notPayable) }
         assertEquals(notPayable, view.delivered.last())
         assertFalse(view.state.isPayEnabled)
-        assertEquals("The order cannot be paid by card: its status is APPROVED.", view.state.errorMessage)
+        assertEquals("The order cannot be paid by card: its status is APPROVED.", view.state.errorMessage(PayriffLanguage.EN))
     }
 
     @Test
@@ -528,12 +540,12 @@ class PaymentViewTest {
         view.controller.setOrder(" ", CLIENT_SECRET)
         view.controller.appear()
         advanceUntilIdle()
-        assertEquals("orderId must not be blank.", view.state.errorMessage)
+        assertEquals("orderId must not be blank.", view.state.errorMessage(PayriffLanguage.EN))
 
         Payriff.reset()
         view.controller.setOrder("o1", CLIENT_SECRET)
         advanceUntilIdle()
-        assertEquals("Payriff.configure() has not been called.", view.state.errorMessage)
+        assertEquals("Payriff.configure() has not been called.", view.state.errorMessage(PayriffLanguage.EN))
         assertTrue(api.requests.isEmpty())
         assertTrue("configuration errors are not fatal for the order", view.delivered.isEmpty())
     }

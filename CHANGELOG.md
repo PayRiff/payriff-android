@@ -43,6 +43,11 @@
   followed by one status check, no zoom, no overscroll effect or scrollbars, and the bank page inset 16 dp from the
   sides and 12 dp from the top and bottom on a white backdrop. It survives rotation and theme changes, and resumes with
   one status check after process death.
+- The 3-D Secure sheet's close confirmation says what closing does (CONTRACT §9.2, §10): "Close this window?", "The
+  payment isn't finished yet. If you close this window, we'll check its status." and "Close", in Azerbaijani, English
+  and Russian. Closing checks the status once; it never cancels the order.
+- `PayriffPaymentView` shows "This order cannot be paid by card" under the Pay button, in the view's language, when the
+  order loaded but cannot be paid by card (`view.notPayable`, CONTRACT §16.14).
 - `PayriffLogger` with privacy-safe log entries (`PayriffLogEntry.formatted`, `timestampMillis`).
 - HTTP details (CONTRACT §11): with logging on in a debuggable app, every Client API call also logs its request and
   response as pretty-printed JSON with headers and body at `DEBUG` level, with keys, client secrets, card fields and
@@ -64,6 +69,11 @@
 - The card form's window, the 3-D Secure sheet and its close confirmation use `FLAG_SECURE`, and on Android 14+ the
   bank page is marked accessibility-data-sensitive. Debuggable apps may opt out with
   `PayriffConfig.allowScreenCaptureInDebug`.
+- The SDK removes the website data of its 3-D Secure pages when the payment ends (CONTRACT §9.1a): it records the hosts
+  of the pages and frames its WebViews request, then removes their storage with `WebStorage.deleteOrigin`, expires
+  their site-wide (`Path=/`) cookies and clears the WebView HTTP cache. Android keeps WebView data per app, so the app's
+  own data for those hosts goes too, and the cache is cleared for the whole app. Payments that never showed a WebView
+  touch nothing.
 - Card data never leaves the SDK except as ciphertext; it is never logged, never saved in the instance state and is
   cleared after a final result. Encryption buffers are zeroed.
 - Links to other apps never crash the host app: malformed `intent:` URLs and refused launches are logged and

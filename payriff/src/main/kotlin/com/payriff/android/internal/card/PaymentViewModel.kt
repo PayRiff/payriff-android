@@ -51,8 +51,8 @@ internal class PaymentViewState {
     var isFinished: Boolean = false
         private set
 
-    /** Why the order can no longer be paid after a payment (a fatal error, or `ORDER_NOT_PAYABLE`). */
-    var endedMessage: String? = null
+    /** The error of a payment that ended the order (a fatal error, or `ORDER_NOT_PAYABLE`); the error line shows it. */
+    var endedBy: PayriffError? = null
         private set
 
     /** Whether a fatal error was already reported through the result listener; it is reported once. */
@@ -74,22 +74,24 @@ internal class PaymentViewState {
      * payment runs. Otherwise the button is dimmed to 50%.
      */
     val isPayEnabled: Boolean
-        get() = order is Order.Payable && !isFinished && endedMessage == null && isFormComplete && !isPaying && !isFormProcessing
+        get() = order is Order.Payable && !isFinished && endedBy == null && isFormComplete && !isPaying && !isFormProcessing
 
     /** Whether a spinner replaces the Pay button's title. */
     val isBusy: Boolean
         get() = isPaying || isFormProcessing
 
     /**
-     * The error line under the button: why a payment ended the order, `retrieveOrder`'s error message, or "This order
-     * cannot be paid"; `null` while the order loads or can be paid.
+     * The error line under the button in [language]: why a payment ended the order, `retrieveOrder`'s error message,
+     * or "This order cannot be paid by card" (`view.notPayable`); `null` while the order loads or can be paid.
      */
-    val errorMessage: String?
-        get() = endedMessage ?: when (val current = order) {
-            is Order.NotPayable -> PaymentViewPlan.NOT_PAYABLE_MESSAGE
-            is Order.Failed -> messageOf(current.error)
+    fun errorMessage(language: PayriffLanguage): String? {
+        endedBy?.let { return messageOf(it, language) }
+        return when (val current = order) {
+            is Order.NotPayable -> PaymentViewPlan.notPayableMessage(language)
+            is Order.Failed -> messageOf(current.error, language)
             else -> null
         }
+    }
 
     /**
      * Whether the order should be loaded when the view appears: it was never loaded, or loading failed with an error
@@ -106,7 +108,7 @@ internal class PaymentViewState {
     fun newOrder() {
         order = Order.Loading
         isFinished = false
-        endedMessage = null
+        endedBy = null
         fatalReported = false
     }
 
@@ -140,7 +142,7 @@ internal class PaymentViewState {
         isPaying = false
         if (result !is PayriffResult.Failed) isFinished = true
         val error = result.error ?: return
-        if (error.isFatal || error.code == PayriffErrorCode.ORDER_NOT_PAYABLE) endedMessage = messageOf(error)
+        if (error.isFatal || error.code == PayriffErrorCode.ORDER_NOT_PAYABLE) endedBy = error
         if (error.isFatal) fatalReported = true
     }
 
@@ -149,7 +151,8 @@ internal class PaymentViewState {
         isPaying = false
     }
 
-    private fun messageOf(error: PayriffError): String = error.message.trim().ifEmpty { PaymentViewPlan.NOT_PAYABLE_MESSAGE }
+    private fun messageOf(error: PayriffError, language: PayriffLanguage): String =
+        error.message.trim().ifEmpty { PaymentViewPlan.notPayableMessage(language) }
 }
 
 /**

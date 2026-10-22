@@ -57,6 +57,7 @@ internal object CardStrings {
                 "pay" to "Ödə",
                 "secure" to "PCI DSS ilə təhlükəsiz ödəniş",
                 "poweredBy" to "Payriff tərəfindən hazırlanıb",
+                "notPayable" to "Bu sifarişi kartla ödəmək mümkün deyil",
             ),
         ),
         "en" to mapOf(
@@ -100,6 +101,7 @@ internal object CardStrings {
                 "pay" to "Pay",
                 "secure" to "Proceed securely by PCI DSS",
                 "poweredBy" to "Powered by Payriff",
+                "notPayable" to "This order cannot be paid by card",
             ),
         ),
         "ru" to mapOf(
@@ -143,6 +145,7 @@ internal object CardStrings {
                 "pay" to "Оплатить",
                 "secure" to "Безопасная оплата по PCI DSS",
                 "poweredBy" to "При поддержке Payriff",
+                "notPayable" to "Этот заказ нельзя оплатить картой",
             ),
         ),
     )
@@ -170,9 +173,12 @@ internal object CardStrings {
     /** The payment view's footer, "Powered by Payriff", where the logo replaces "Payriff". */
     const val VIEW_POWERED_BY = "poweredBy"
 
+    /** The payment view's error line for an order that cannot be paid by card: "This order cannot be paid by card". */
+    const val VIEW_NOT_PAYABLE = "notPayable"
+
     /**
-     * The payment view's copy (CONTRACT §16.14): [VIEW_PAY] (followed by the amount), [VIEW_SECURE] (the PCI DSS line)
-     * or [VIEW_POWERED_BY] (split at "Payriff", where the logo goes).
+     * The payment view's copy (CONTRACT §16.14): [VIEW_PAY] (followed by the amount), [VIEW_SECURE] (the PCI DSS line),
+     * [VIEW_POWERED_BY] (split at "Payriff", where the logo goes) or [VIEW_NOT_PAYABLE] (the error line).
      */
     fun view(language: PayriffLanguage, key: String): String = group(language, "view").getValue(key)
 

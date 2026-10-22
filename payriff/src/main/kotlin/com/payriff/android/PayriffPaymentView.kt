@@ -288,12 +288,13 @@ public class PayriffPaymentView @JvmOverloads constructor(
     /** The Pay button, the error line and which parts show (CONTRACT §16.14). Runs on every change of the form. */
     private fun render() {
         val state = controller.state
+        val language = form.effectiveLanguage()
         state.isFormComplete = form.isComplete
         state.isFormProcessing = form.isProcessing
-        payButton.title = state.payTitle(form.effectiveLanguage())
+        payButton.title = state.payTitle(language)
         payButton.isBusy = state.isBusy
         payButton.isEnabled = state.isPayEnabled
-        val error = state.errorMessage
+        val error = state.errorMessage(language)
         // Only a new message: setting the same text again would make TalkBack repeat it.
         if (error != null && errorLine.text.toString() != error) errorLine.text = error
         val shown = PaymentViewPlan.content(style, showsError = error != null).associate { it.part to it.gapAboveDp }

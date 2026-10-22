@@ -186,7 +186,7 @@ Every call needs `Payriff.configure` first; before it, card calls fail with `NOT
 
 ## The payment view
 
-`PayriffPaymentView` is the SDK's ready-made payment screen, a plain `View`. It shows the card form, a Pay button with the order's amount ("Pay 1.02 AZN"), the PCI DSS, Mastercard and Visa badges, a "Proceed securely by PCI DSS" line and a "Powered by Payriff" footer, like the card part of pay.payriff.com.
+`PayriffPaymentView` is the SDK's ready-made payment screen, a plain `View`. It shows the card form, a Pay button with the order's amount ("Pay 1.02 AZN"), the Mastercard and Visa badges, a "Proceed securely by PCI DSS" line and a "Powered by Payriff" footer, like the card part of pay.payriff.com.
 
 | `PayriffPaymentView` | |
 |---|---|
@@ -478,6 +478,7 @@ Privacy rules:
 - **App identity.** Every Client API request carries your package name as `X-Client-App-Id`, and never `Origin` or `Authorization`. Payriff allows your publishable key only for the package names you registered.
 - **Start-up provider.** The SDK's manifest adds a small content provider (`com.payriff.android.internal.PayriffInitProvider`). When your process starts, it records your package name and whether the app is debuggable, so `Payriff.retrieveOrder` works without a `Context`. It is not exported, stores nothing and does no I/O. If you remove it from your merged manifest (`tools:node="remove"`), the SDK learns this at the first card payment instead and, until then, treats the app as a release build.
 - **Security.** The 3-D Secure activity is not exported, never injects JavaScript, does not change the user agent, never proceeds on TLS errors, blocks plain-http pages, and keeps third-party cookies on only for its own WebViews (3-D Secure needs them).
+- **3-D Secure website data.** When a payment that showed 3-D Secure pages ends, the SDK removes what those pages left: the site-wide (`Path=/`) cookies of the hosts they loaded, the storage that `WebStorage.deleteOrigin` clears for those hosts, and the WebView HTTP cache. Android keeps WebView data per app, so your own WebViews lose the same data for those hosts too, and the HTTP cache is cleared for the whole app.
 
 ## Known limitations
 
