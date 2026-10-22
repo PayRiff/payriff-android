@@ -1,0 +1,44 @@
+# Local configuration. local.properties holds sdk.dir and the sample's Payriff settings
+# (payriff.publishableKey, payriff.environment). It must never be committed.
+local.properties
+*.local.properties
+secrets.properties
+.env
+.env.*
+# Templates without real values stay tracked.
+!local.properties.example
+!.env.example
+
+# Signing material and publishing credentials
+*.jks
+*.keystore
+keystore.properties
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+*.gpg
+*.asc
+signing.properties
+
+# Firebase and Google services configuration
+google-services.json
+GoogleService-Info.plist
+
+# Logs
+*.log
+
+# Gradle and Kotlin
+.gradle/
+.kotlin/
+build/
+**/build/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/

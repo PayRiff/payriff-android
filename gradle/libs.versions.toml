@@ -1,0 +1,37 @@
+[versions]
+# Toolchain. Gradle 8.14 + AGP 8.11.1 + KGP 2.2.20 (JDK 17).
+agp = "8.11.1"
+kotlin = "2.2.20"
+# The library is compiled with Kotlin API/language 2.0 and published against kotlin-stdlib 2.0.21,
+# so apps on older Kotlin toolchains can consume it.
+kotlinCoreLibraries = "2.0.21"
+# 0.35.0 is the newest release that supports Gradle 8.x and AGP < 8.13 (0.36+ needs Gradle 9 and AGP 8.13).
+mavenPublish = "0.35.0"
+
+# Library dependencies are published against these floors on purpose. Apps resolve them to their own,
+# newer versions. Raising a floor raises the compileSdk/AGP that every host app needs.
+androidxActivity = "1.9.3"
+androidxCore = "1.13.1"
+coroutines = "1.9.0"
+
+# Tests
+junit = "4.13.2"
+# Test classpath only: stands in for Android's built-in org.json in JVM unit tests and is never published (the POM
+# does not list it). Its DoS advisories (GHSA-3vqj-43w4-2q58, GHSA-4jq9-2xhw-jpx7) concern parsing untrusted input
+# and do not apply to test fixtures. It stays pinned on purpose: newer JSON-java releases changed parsing details (for
+# example a default nesting limit), so a bump needs the vector suites re-checked against Android's org.json behaviour.
+orgJson = "20180813"
+
+[libraries]
+androidx-activity = { module = "androidx.activity:activity", version.ref = "androidxActivity" }
+androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+junit = { module = "junit:junit", version.ref = "junit" }
+org-json = { module = "org.json:json", version.ref = "orgJson" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "mavenPublish" }

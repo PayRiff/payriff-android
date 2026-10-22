@@ -1,0 +1,77 @@
+## [1.0.0] - Unreleased
+
+- First release.
+
+### Added
+
+- The native card flow (CONTRACT §16): your server creates the order with its secret key and gives the app the order's
+  `orderId` and `clientSecret`; the app holds only the publishable key. The SDK never creates orders.
+- `PayriffPaymentView` (CONTRACT §16.14), the ready-made card payment screen, like the card part of Payriff's hosted
+  payment page (pay.payriff.com): the card form, a Pay button with the order's amount ("Pay 1.02 AZN"), the
+  Mastercard and Visa badges, the secure line and a "Powered by Payriff" footer. It reads the order when it appears,
+  pays with a launcher of its own and passes the result of every payment attempt, and once a fatal error that ends the
+  order, to `onResultListener`. Works full screen, in a bottom sheet and in a dialog, follows the system light or dark
+  theme, and gives a result that arrives after the activity was recreated during 3-D Secure to the view with the same
+  id.
+- `PayriffPaymentViewStyle`: the background, the padding, the Pay button's colour, text style, height and corner radius,
+  the secondary text colour, `showBadges`, `showSecureNote`, `showPoweredBy` and the form's `formStyle` (Kotlin named
+  arguments and a Java builder).
+- `Payriff.configure` with `PayriffConfig`: `publishableKey`, `environment`, `language`, `enableLogging` and
+  `allowScreenCaptureInDebug` (Kotlin named arguments and a Java builder). `configure` never throws; a key that is not
+  a publishable key is logged as a warning, and card calls then fail with `INVALID_CONFIG`.
+- `PayriffCardForm`, a native card form (Views, Compose through `AndroidView`, Java): Visa and Mastercard, the Luhn
+  check, an expiry at most 20 years ahead, a 3-digit CVV and the cardholder name, which is shown by default
+  (`showHolder = false` hides it and sends the name `Unknown`, as on the web); `autoAdvance`, `language`, `style` and
+  change events that never carry the typed values.
+- The card form looks like the hosted payment page's by default, with the cardholder name and one "Card information"
+  box, and `PayriffCardFormStyle` changes its layout (`GROUPED` or `STACKED`), text, colours and sizes (CONTRACT §16.4).
+- Card numbers have at most 16 digits for every brand (CONTRACT §16.4): typing stops at 16 digits and a 19-digit Visa
+  number is refused, although the web SDK accepts it.
+- The card number field shows the brand's mark (CONTRACT §16.4): the Visa wordmark or the Mastercard circles on
+  a 36×24 dp white badge with a `#D1D1D6` border, a neutral card outline while the brand is unknown, a 150 ms
+  cross-fade, and "Visa" or "Mastercard" for accessibility services.
+- The cardholder name is always upper case, with the locale-independent mapping (CONTRACT §16.4).
+- `PayriffCardPaymentLauncher` (callback and `suspend` `confirm`): validates the form, checks that the order is payable
+  by card, encrypts the card on the device (AES-256-GCM, key wrapped with RSA-OAEP SHA-256 and Payriff's pinned key),
+  sends it, runs the bank's 3-D Secure step and polls the status. Results that arrive after the activity was recreated
+  go to `onRestoredResult`.
+- `Payriff.retrieveOrder` with `PayriffClientOrder` (suspending, plus a Java callback variant).
+- A typed `PayriffResult` (`Success`, `Declined`, `Cancelled`, `Pending`, `Failed`) with the JSON shape shared by every
+  Payriff SDK, and `PayriffError` with `isFatal`, `fields` and the card error codes.
+- The 3-D Secure sheet (CONTRACT §9.1, §16.8): the title alone in the header (no address, padlock or host), a native
+  loader instead of a progress bar, a close button that is disabled while the payment is checked, a close confirmation
+  followed by one status check, no zoom, no overscroll effect or scrollbars, and the bank page inset 16 dp from the
+  sides and 12 dp from the top and bottom on a white backdrop. It survives rotation and theme changes, and resumes with
+  one status check after process death.
+- `PayriffLogger` with privacy-safe log entries (`PayriffLogEntry.formatted`, `timestampMillis`).
+- HTTP details (CONTRACT §11): with logging on in a debuggable app, every Client API call also logs its request and
+  response as pretty-printed JSON with headers and body at `DEBUG` level, with keys, client secrets, card fields and
+  bank form values redacted, card numbers cut to their last 4 digits and URL queries removed; release builds never log
+  them.
+- Helpers shared with the other Payriff SDKs: `Payriff.version`, `Payriff.isPaymentInProgress`,
+  `PayriffEnvironment.apiBaseUrl`, `PayriffPaymentStatus.fromRaw`, and `isSuccess`, `payment`, `error` and `toJson()`
+  on every `PayriffResult`.
+- Example app (`sample`): a "Card (native)" main screen with an "Order from your backend" section (`orderId` and
+  `clientSecret` fields, and "Paste order", which reads the JSON `{"orderId", "clientSecret"}` or the two values
+  separated by white space), "Pay with PayriffPaymentView", which opens the payment view for that order on a screen of
+  its own, the order shown through `Payriff.retrieveOrder`, the card form, Pay, and the outcome in a result dialog;
+  plus Settings (publishable key, environment, language, the payment view's look) and the SDK log. It holds no secret
+  key and creates no orders.
+
+### Security
+
+- The secret key is never part of the SDK or the example app: no configuration, call or test uses it.
+- The card form's window, the 3-D Secure sheet and its close confirmation use `FLAG_SECURE`, and on Android 14+ the
+  bank page is marked accessibility-data-sensitive. Debuggable apps may opt out with
+  `PayriffConfig.allowScreenCaptureInDebug`.
+- Card data never leaves the SDK except as ciphertext; it is never logged, never saved in the instance state and is
+  cleared after a final result. Encryption buffers are zeroed.
+- Links to other apps never crash the host app: malformed `intent:` URLs and refused launches are logged and
+  ignored, links with `file:` or `content:` data and links over 64 KB are refused, and an `intent:` fallback loads
+  only over https.
+- A pathologically nested API response is treated as unparseable instead of overflowing the stack.
+- README: "Fulfil on your server", the rules for fulfilling only after your backend confirmed the order.
+- `SECURITY.md`: how to report a vulnerability privately, through GitHub's private vulnerability reporting.
+
+<!-- Replace "Unreleased" with the release date when publishing. The format follows Keep a Changelog
+     (https://keepachangelog.com/en/1.1.0/) and the project uses Semantic Versioning (https://semver.org/). -->

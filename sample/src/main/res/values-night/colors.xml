@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand">#FF4C9BF7</color>
+    <color name="background">#FF121216</color>
+    <color name="card">#FF1C1C21</color>
+    <color name="text_secondary">#FFA4A6AE</color>
+    <color name="warning">#FFF2B33D</color>
+    <color name="success">#FF35C27A</color>
+    <color name="error">#FFF0675C</color>
+    <color name="payment_background">#FF222224</color>
+    <color name="custom_form_accent">#FFA996FF</color>
+    <color name="custom_form_field">#FF1E1A2E</color>
+    <color name="custom_form_border">#FF4B3F80</color>
+</resources>

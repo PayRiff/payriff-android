@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The payment screen: a back button above PayriffPaymentView, which fills the rest. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/payment_background"
+    android:orientation="vertical">
+
+    <Button
+        android:id="@+id/backButton"
+        style="@android:style/Widget.Material.Button.Borderless.Colored"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:minHeight="48dp"
+        android:text="@string/payment_back" />
+
+    <!-- A fixed id: a result that arrives after the activity was recreated during 3-D Secure goes to the view with it. -->
+    <com.payriff.android.PayriffPaymentView
+        android:id="@+id/paymentView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1" />
+</LinearLayout>

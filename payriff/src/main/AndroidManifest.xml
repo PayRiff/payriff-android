@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application>
+        <!--
+            The 3-D Secure sheet of the card flow. configChanges keeps the WebView (and a 3-D Secure page in progress)
+            alive across rotation, window resizing and theme changes. Never set screenOrientation on this translucent
+            activity.
+        -->
+        <activity
+            android:name=".internal.PayriffActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|layoutDirection|locale|colorMode|touchscreen|mcc|mnc"
+            android:enableOnBackInvokedCallback="true"
+            android:exported="false"
+            android:theme="@style/Payriff.Theme.Sheet"
+            android:windowSoftInputMode="adjustResize|stateHidden"
+            tools:targetApi="34" />
+
+        <!--
+            Records whether the app is debuggable, and its package name, when the process starts, before
+            Application.onCreate: the package name is the X-Client-App-Id of every card call, and debuggability decides
+            the debug-only HTTP log and screen-capture opt-out (CONTRACT §11, §16.0, §16.2). It is not exported and
+            holds no data.
+        -->
+        <provider
+            android:name=".internal.PayriffInitProvider"
+            android:authorities="${applicationId}.payriff-init"
+            android:exported="false" />
+    </application>
+</manifest>

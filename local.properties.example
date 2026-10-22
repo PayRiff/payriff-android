@@ -1,0 +1,11 @@
+# Copy to local.properties (git-ignored) and fill in. Never commit real values.
+# Android Studio writes sdk.dir itself; alternatively set ANDROID_HOME.
+sdk.dir=
+
+# Example app defaults. Compiled into the DEBUG build of :sample only; the app's Settings screen overrides them.
+# Publishable key (pr_pk_live_...) of the environment below, from the Payriff dashboard.
+payriff.publishableKey=
+# SANDBOX or PRODUCTION
+payriff.environment=SANDBOX
+# There is no secret key here: your server creates the order with its secret key (POST /api/v3/orders)
+# and returns orderId and clientSecret.
