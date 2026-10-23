@@ -9,6 +9,7 @@ import android.text.Editable
 import android.text.InputFilter
 import android.text.InputType
 import android.text.TextWatcher
+import android.text.method.DigitsKeyListener
 import android.text.method.PasswordTransformationMethod
 import android.util.AttributeSet
 import android.view.Gravity
@@ -470,13 +471,18 @@ public class PayriffCardForm @JvmOverloads constructor(
     private fun configureInputs() {
         val noLearning = EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING or EditorInfo.IME_FLAG_NO_EXTRACT_UI
         with(number.input) {
-            inputType = InputType.TYPE_CLASS_NUMBER
+            // The formatter inserts spaces. A plain TYPE_CLASS_NUMBER would filter them out again, so the key
+            // listener accepts them and the raw input type keeps the number keyboard.
+            keyListener = DigitsKeyListener.getInstance("0123456789 ")
+            setRawInputType(InputType.TYPE_CLASS_NUMBER)
             imeOptions = noLearning
             blocksCopy = true
             addTextChangedListener(Watcher(number) { s, _ -> CardFormat.formatNumber(s) })
         }
         with(expiry.input) {
-            inputType = InputType.TYPE_CLASS_NUMBER
+            // Same for the " / " the formatter inserts.
+            keyListener = DigitsKeyListener.getInstance("0123456789 /")
+            setRawInputType(InputType.TYPE_CLASS_NUMBER)
             imeOptions = noLearning
             addTextChangedListener(Watcher(expiry) { s, inserting -> CardFormat.formatExpiry(s, inserting) })
         }

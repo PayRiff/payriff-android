@@ -49,7 +49,26 @@ Documentation of the Payriff API: <https://docs.payriff.com>
 
 ## Installation
 
-The SDK is published on Maven Central.
+Version 1.0.0 is not on Maven Central yet. Until it is, build it from this repository into your local Maven
+repository and add `mavenLocal()` for the `com.payriff` group:
+
+```sh
+git clone https://github.com/PayRiff/payriff-android.git
+cd payriff-android && ./gradlew :payriff:publishToMavenLocal
+```
+
+```kotlin
+// settings.gradle.kts (until the Maven Central release)
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        mavenLocal { content { includeGroup("com.payriff") } }
+    }
+}
+```
+
+After the release, Maven Central is enough:
 
 ```kotlin
 // settings.gradle.kts
