@@ -37,6 +37,16 @@ internal object Urls {
     private const val MAX_PORT = 65_535
     private const val MAX_LOGGED_LENGTH = 200
 
+    /** What [redact] returns for a URL that [parse] refuses: no valid scheme, an invalid port or IPv6 host. */
+    private const val UNPARSEABLE = "<unparseable url>"
+
+    /** Payriff's API hosts (CONTRACT §2): the only hosts whose URL paths are logged (§11). */
+    private val LOGGED_PATH_HOSTS = setOf("api.payriff.com", "sb-api.payriff.com")
+
+    /** A logged path segment of this many characters or more is cut to its first and last [SEGMENT_END_LENGTH]. */
+    private const val LONG_SEGMENT_LENGTH = 16
+    private const val SEGMENT_END_LENGTH = 4
+
     /** Parses [url], or returns `null` when it has no valid scheme or an invalid port. */
     fun parse(url: String?): ParsedUrl? {
         if (url.isNullOrEmpty()) return null
@@ -91,15 +101,43 @@ internal object Urls {
     fun isAbsoluteHttpsUrl(url: String?): Boolean = parse(url)?.let { it.scheme == "https" && !it.host.isNullOrEmpty() } == true
 
     /**
-     * A URL safe to log (CONTRACT §11): an http(s) URL without its query and fragment; any other scheme only as
-     * `<scheme>:…`, so `tel:` numbers, `mailto:` addresses and `data:` or `javascript:` content never reach the logs.
+     * [url] as the logs show it (CONTRACT §11). This one function redacts every logged URL: in the general log, in the
+     * HTTP details and inside logged bodies.
+     *
+     * - An http(s) URL never shows its user info (`user:password@`), query or fragment. Its path is kept only on
+     *   Payriff's API hosts (`api.payriff.com`, `sb-api.payriff.com`), with every segment of 16 or more characters
+     *   shortened to its first 4 and last 4 (`/api/v3/client/orders/7c9e…0ae7/pay`). Any other host, such as a bank's
+     *   3-D Secure page, shows as `scheme://host[:port]` only.
+     * - Any other scheme shows only as `<scheme>:…`, so `tel:` numbers, `mailto:` addresses and `data:` or
+     *   `javascript:` content never reach the logs.
+     *
+     * The scheme and the host are lower-cased, and a result longer than [MAX_LOGGED_LENGTH] characters is cut there and
+     * ends with `…`. [url] may be a view of a char array that is wiped later ([HttpLog]): its query and fragment never
+     * become a `String`.
      */
-    fun redact(url: String?): String {
+    fun redact(url: CharSequence?): String {
         if (url == null) return "null"
-        val parsed = parse(url) ?: return "<unparseable url>"
-        if (!parsed.isHttp) return "${parsed.scheme}:…"
-        val cut = cutQueryAndFragment(url)
-        return if (cut.length > MAX_LOGGED_LENGTH) cut.take(MAX_LOGGED_LENGTH) + "…" else cut
+        val end = url.indexOfFirst { it == '?' || it == '#' }.let { if (it < 0) url.length else it }
+        val parsed = parse(url.subSequence(0, end).toString()) ?: return UNPARSEABLE
+        if (!parsed.isHttp || parsed.host.isNullOrEmpty()) return "${parsed.scheme}:…"
+        val shown = StringBuilder(parsed.scheme).append("://").append(parsed.host)
+        if (parsed.port >= 0) shown.append(':').append(parsed.port)
+        if (parsed.host in LOGGED_PATH_HOSTS) shown.append(shortenLongSegments(parsed.path))
+        return if (shown.length > MAX_LOGGED_LENGTH) shown.substring(0, MAX_LOGGED_LENGTH) + "…" else shown.toString()
+    }
+
+    /**
+     * [path] with every segment of [LONG_SEGMENT_LENGTH] or more characters cut to its first and last
+     * [SEGMENT_END_LENGTH], joined by `…` (CONTRACT §11).
+     */
+    private fun shortenLongSegments(path: String): String = path.split('/').joinToString("/") { segment ->
+        // Characters are counted as code points, so a surrogate pair is never split.
+        if (segment.codePointCount(0, segment.length) < LONG_SEGMENT_LENGTH) {
+            segment
+        } else {
+            segment.substring(0, segment.offsetByCodePoints(0, SEGMENT_END_LENGTH)) + "…" +
+                segment.substring(segment.offsetByCodePoints(segment.length, -SEGMENT_END_LENGTH))
+        }
     }
 
     /**

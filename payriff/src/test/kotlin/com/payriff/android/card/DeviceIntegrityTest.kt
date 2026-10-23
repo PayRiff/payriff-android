@@ -7,6 +7,7 @@ import com.payriff.android.PayriffErrorCode
 import com.payriff.android.PayriffResult
 import com.payriff.android.internal.DeviceIntegrity
 import com.payriff.android.internal.DeviceIntegrityGuard
+import com.payriff.android.internal.HostApp
 import com.payriff.android.internal.IntegrityProbes
 import com.payriff.android.internal.IntegritySignal
 import com.payriff.android.internal.MapKeyValues
@@ -31,8 +32,8 @@ import org.junit.Test
 /**
  * Device integrity (CONTRACT §16.16): the decision logic over injectable probes (each signal on its own, none, the
  * debug-build rule for the debugger, file checks cached while runtime checks stay fresh, and a check that cannot
- * complete failing closed), the block/warn policy, and the payment view's behaviour when the device is blocked. No real
- * device is touched.
+ * complete failing closed), the block/warn policy with its debug-build-only opt-out, and the payment view's behaviour
+ * when the device is blocked. No real device is touched.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class DeviceIntegrityTest {
@@ -204,8 +205,8 @@ class DeviceIntegrityTest {
         assertTrue(logs.lines.any { "refused" in it && "Signals: check failed." in it })
 
         logs.lines.clear()
-        val allowed = DeviceIntegrityGuard.decide(signals, PayriffConfig(enableLogging = true, allowCompromisedDevices = true))
-        assertNull("allowCompromisedDevices only warns, as for any signal", allowed)
+        val allowed = DeviceIntegrityGuard.decide(signals, PayriffConfig(enableLogging = true, allowCompromisedDevices = true), debuggable = true)
+        assertNull("in a debuggable app allowCompromisedDevices only warns, as for any signal", allowed)
         assertTrue(logs.lines.any { "proceeding" in it && "Signals: check failed." in it })
     }
 
@@ -247,12 +248,87 @@ class DeviceIntegrityTest {
         assertTrue(logs.lines.any { "refused" in it && "Magisk, Frida" in it })
 
         logs.lines.clear()
-        val allowed = DeviceIntegrityGuard.decide(signals, PayriffConfig(enableLogging = true, allowCompromisedDevices = true))
-        assertNull("allowCompromisedDevices only warns", allowed)
+        val allowed = DeviceIntegrityGuard.decide(signals, PayriffConfig(enableLogging = true, allowCompromisedDevices = true), debuggable = true)
+        assertNull("in a debuggable app allowCompromisedDevices only warns", allowed)
         assertTrue(logs.lines.any { "proceeding" in it && "Magisk, Frida" in it })
 
         assertNull("a clean device is never blocked", DeviceIntegrityGuard.decide(emptySet(), PayriffConfig()))
         assertFalse("the warning never names file contents", logs.lines.any { "/data/adb" in it || "/system/" in it })
+    }
+
+    /** CONTRACT §16.16: the opt-out works only in debuggable apps, so leaving it on cannot reach production. */
+    @Test
+    fun theOptOutWorksOnlyInDebuggableApps() {
+        val signals = setOf(IntegritySignal.MAGISK)
+        val optedIn = PayriffConfig(enableLogging = true, allowCompromisedDevices = true)
+
+        assertNull("a debuggable app may opt in", DeviceIntegrityGuard.decide(signals, optedIn, debuggable = true))
+        assertTrue(logs.lines.any { "proceeding" in it && "Magisk" in it })
+        assertFalse(logs.lines.any { "ignored" in it })
+
+        // A release build, and an app whose debuggability is not known yet, ignore the flag: refused as if it were off.
+        for (debuggable in listOf(false, null)) {
+            logs.lines.clear()
+            val refused = DeviceIntegrityGuard.decide(signals, optedIn, debuggable = debuggable)
+            assertEquals("$debuggable", PayriffErrorCode.DEVICE_COMPROMISED, refused?.code)
+            assertEquals(DeviceIntegrityGuard.BLOCK_MESSAGE, refused?.message)
+            assertEquals(
+                listOf(
+                    "[Payriff] [WARNING] Device integrity: allowCompromisedDevices is ignored outside debug builds (the app is not debuggable).",
+                    "[Payriff] [WARNING] Device integrity: card payment refused on this device. Signals: Magisk.",
+                ),
+                logs.lines,
+            )
+        }
+
+        logs.lines.clear()
+        assertNull("a clean device needs no opt-out", DeviceIntegrityGuard.decide(emptySet(), optedIn, debuggable = false))
+        val withoutFlag = DeviceIntegrityGuard.decide(signals, PayriffConfig(enableLogging = true), debuggable = true)
+        assertEquals("a debuggable app without the flag is refused too", PayriffErrorCode.DEVICE_COMPROMISED, withoutFlag?.code)
+        assertFalse("nothing is ignored without the flag", logs.lines.any { "ignored" in it })
+    }
+
+    /** By default the policy reads the host app's `FLAG_DEBUGGABLE`, which [HostApp] records from a `Context`. */
+    @Test
+    fun theOptOutFollowsTheHostAppsDebuggableFlag() {
+        val signals = setOf(IntegritySignal.FRIDA)
+        val optedIn = PayriffConfig(allowCompromisedDevices = true)
+        try {
+            HostApp.setForTests(debuggable = true)
+            assertNull(DeviceIntegrityGuard.decide(signals, optedIn))
+            HostApp.setForTests(debuggable = false)
+            assertEquals(PayriffErrorCode.DEVICE_COMPROMISED, DeviceIntegrityGuard.decide(signals, optedIn)?.code)
+            HostApp.setForTests(debuggable = null)
+            assertEquals("not known yet: a release build", PayriffErrorCode.DEVICE_COMPROMISED, DeviceIntegrityGuard.decide(signals, optedIn)?.code)
+        } finally {
+            HostApp.setForTests(debuggable = null)
+        }
+    }
+
+    @Test
+    fun aReleaseBuildWithTheOptOutStillStopsThePaymentBeforeEncryption() = runTest {
+        // The launcher's last check (CONTRACT §16.16) in a release build that left allowCompromisedDevices on.
+        val transport = FakeTransport { testScheduler.currentTime }
+        transport.on("GET", "/api/v3/client/orders/o1", http(200, ok(orderPayload())))
+        val probes = FakeProbes().apply { frida = true }
+        val confirmation = CardConfirmation(
+            api = CardApiClient(credentials(), transport),
+            encrypt = { throw AssertionError("a release build must not encrypt the card on a compromised device") },
+            recheckDevice = {
+                val signals = DeviceIntegrityGuard.signals { DeviceIntegrity(probes) { false } }
+                DeviceIntegrityGuard.decide(signals, PayriffConfig(allowCompromisedDevices = true), debuggable = false)?.let { throw it }
+            },
+        )
+        val card = testCard()
+        val error = try {
+            confirmation.run("o1", card)
+            null
+        } catch (e: PayriffError) {
+            e
+        }
+        assertEquals(PayriffErrorCode.DEVICE_COMPROMISED, error?.code)
+        assertEquals("nothing but the order load is sent", listOf("GET /api/v3/client/orders/o1"), transport.requests.map { "${it.method} ${it.path}" })
+        assertTrue(card.pan.all { it == '\u0000' } && card.cvv.all { it == '\u0000' })
     }
 
     @Test

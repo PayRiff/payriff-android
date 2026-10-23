@@ -16,8 +16,9 @@ public enum class PayriffLogLevel {
 }
 
 /**
- * One SDK log line. Secrets are never logged: keys and client secrets appear as `***(<length>)`, card data never
- * appears, http(s) URLs are logged without their query and fragment, and other URLs only as `<scheme>:…`.
+ * One SDK log line. Secrets are never logged: keys and client secrets appear as `***(<length>)`, and card data never
+ * appears. URLs never show their user info, query or fragment: only Payriff's API hosts keep their path, with long
+ * segments shortened, any other host shows as `scheme://host[:port]`, and other schemes only as `<scheme>:…`.
  *
  * @property level Severity.
  * @property message The message, without the `[Payriff] [LEVEL]` prefix.

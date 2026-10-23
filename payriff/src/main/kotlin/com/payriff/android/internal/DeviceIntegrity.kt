@@ -16,7 +16,8 @@ import java.net.Socket
  * enough to refuse a card payment. [label] names the signal in the warning log; it never carries file contents.
  *
  * [CHECK_FAILED] is not something a probe found: the check could not complete, and it fails closed, so breaking the
- * check does not skip it. [PayriffConfig.allowCompromisedDevices] treats it like any other signal.
+ * check does not skip it. In a debuggable app, [PayriffConfig.allowCompromisedDevices] treats it like any other
+ * signal.
  */
 internal enum class IntegritySignal(val label: String) {
     SU_BINARY("su binary"),
@@ -152,10 +153,11 @@ internal object DeviceIntegrityGuard {
     fun isCompromised(context: Context): Boolean = signals { of(context) }.isNotEmpty()
 
     /**
-     * The §16.16 policy at an enforcement point: a [PayriffError] when the device is compromised and
-     * [PayriffConfig.allowCompromisedDevices] is off, or `null` when the device is clean or the app opted in (then a
-     * warning names the matched signals). Neither the warning nor the error carries file contents. A check that cannot
-     * complete is the signal [IntegritySignal.CHECK_FAILED], with the same policy.
+     * The §16.16 policy at an enforcement point: a [PayriffError] when the device is compromised, or `null` when the
+     * device is clean or a debuggable app opted in with [PayriffConfig.allowCompromisedDevices] (then a warning names
+     * the matched signals). Neither the warning nor the error carries file contents. A check that cannot complete is
+     * the signal [IntegritySignal.CHECK_FAILED], with the same policy. Whether the app is debuggable comes from
+     * [HostApp], which every enforcement point records from its `Context` first.
      */
     fun blockReason(context: Context, config: PayriffConfig?): PayriffError? = decide(signals { of(context) }, config)
 
@@ -166,13 +168,23 @@ internal object DeviceIntegrityGuard {
      */
     fun signals(integrity: () -> DeviceIntegrity): Set<IntegritySignal> = failClosed { integrity().matchedSignals() }
 
-    /** The policy over an already-computed signal set. Pure apart from the warning log, so the JVM tests drive it. */
-    fun decide(signals: Set<IntegritySignal>, config: PayriffConfig?): PayriffError? {
+    /**
+     * The policy over an already-computed signal set. Pure apart from the warning log, so the JVM tests drive it, with
+     * either value of [debuggable].
+     *
+     * [PayriffConfig.allowCompromisedDevices] counts only when the host app is [debuggable] (`FLAG_DEBUGGABLE`,
+     * CONTRACT §16.16). In any other build, an app whose debuggability is not known yet included, it is ignored with a
+     * warning and a compromised device is refused as by default, so leaving it on cannot reach production.
+     */
+    fun decide(signals: Set<IntegritySignal>, config: PayriffConfig?, debuggable: Boolean? = HostApp.debuggable): PayriffError? {
         if (signals.isEmpty()) return null
         val names = signals.joinToString(", ") { it.label }
         if (config?.allowCompromisedDevices == true) {
-            PayriffLog.warning { "Device integrity: proceeding on a compromised device; allowCompromisedDevices is on. Signals: $names." }
-            return null
+            if (debuggable == true) {
+                PayriffLog.warning { "Device integrity: proceeding on a compromised device; allowCompromisedDevices is on. Signals: $names." }
+                return null
+            }
+            PayriffLog.warning { "Device integrity: allowCompromisedDevices is ignored outside debug builds (the app is not debuggable)." }
         }
         PayriffLog.warning { "Device integrity: card payment refused on this device. Signals: $names." }
         return PayriffError(PayriffErrorCode.DEVICE_COMPROMISED, BLOCK_MESSAGE)

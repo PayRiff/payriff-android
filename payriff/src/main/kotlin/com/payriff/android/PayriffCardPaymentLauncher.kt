@@ -146,7 +146,7 @@ public class PayriffCardPaymentLauncher private constructor(
         if (pending != null) return fail(PaymentGuard.inProgressError())
         PaymentGuard.busyError()?.let { return fail(it) }
         Payriff.onContextAvailable(form.context)
-        // CONTRACT §16.16: refuse a compromised device before anything is sent (unless allowCompromisedDevices is on).
+        // CONTRACT §16.16: refuse a compromised device before anything is sent (unless a debuggable app allows it).
         DeviceIntegrityGuard.blockReason(form.context, Payriff.config)?.let { return fail(it) }
         val (id, credentials) = try {
             CardSetup.orderId(orderId) to CardSetup.credentials(Payriff.config, clientSecret)

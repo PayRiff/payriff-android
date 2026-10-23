@@ -3,6 +3,8 @@ package com.payriff.android.internal
 import com.payriff.android.Payriff
 import com.payriff.android.PayriffConfig
 import com.payriff.android.PayriffEnvironment
+import com.payriff.android.PayriffError
+import com.payriff.android.PayriffErrorCode
 import com.payriff.android.PayriffLogEntry
 import com.payriff.android.PayriffLogLevel
 import com.payriff.android.PayriffLogListener
@@ -121,18 +123,28 @@ class HttpLogTest {
         )
     }
 
+    /** CONTRACT §11: URLs inside bodies follow the rule of every logged URL ([Urls.redact]). */
     @Test
-    fun urlsLoseTheirQueryAndFragment() {
+    fun urlsInBodiesAreRedactedLikeEveryLoggedUrl() {
         assertEquals(
-            """{"redirectUrl":"https://3ds.bank.example/r/o1"}""",
-            HttpLog.redactBody("""{"redirectUrl":"https://3ds.bank.example/r/o1?token=T#x"}"""),
+            "a bank page shows its host only",
+            """{"redirectUrl":"https://3ds.bank.example"}""",
+            HttpLog.redactBody("""{"redirectUrl":"https://3ds.bank.example/r/o1/SESSION_TOKEN?token=T#x"}"""),
         )
         assertEquals(
-            """["HTTPS://acs.bank.example/c","http://bank.example/3ds","/api/v3/client/orders?page=1","not a url?x"]""",
-            HttpLog.redactBody("""["HTTPS://acs.bank.example/c?token=T#f","http://bank.example/3ds#frag","/api/v3/client/orders?page=1","not a url?x"]"""),
+            """["https://acs.bank.example","http://bank.example:8080","https://api.payriff.com/api/v3/client/orders/7c9e…0ae7/three-ds","/api/v3/client/orders?page=1","not a url?x"]""",
+            HttpLog.redactBody(
+                """["HTTPS://user:pw@ACS.Bank.Example/c/SESSION?token=T#f","http://bank.example:8080/3ds#frag","https://api.payriff.com/api/v3/client/orders/7c9e6679-7425-40de-944b-e07fc1f90ae7/three-ds?x=1","/api/v3/client/orders?page=1","not a url?x"]""",
+            ),
         )
-        assertEquals("https://api.payriff.com/api/v3/client/orders", HttpLog.redactUrl("https://api.payriff.com/api/v3/client/orders?x=1#y"))
-        assertEquals("tel:…", HttpLog.redactUrl("tel:+994500000000"))
+        assertEquals(
+            "at any depth, with user info and ports",
+            """{"a":{"b":[{"url":"https://acs.bank.example:8443"},{"url":"https://sb-api.payriff.com/api/v3/client/orders/o1"}]}}""",
+            HttpLog.redactBody(
+                """{"a":{"b":[{"url":"https://u:SECRET_PW@acs.bank.example:8443/c"},{"url":"https://u:SECRET_PW@sb-api.payriff.com/api/v3/client/orders/o1#f"}]}}""",
+            ),
+        )
+        assertEquals("""{"u":"<unparseable url>"}""", HttpLog.redactBody("""{"u":"https://host:99999/x?token=T"}"""))
     }
 
     @Test
@@ -222,6 +234,23 @@ class HttpLogTest {
     }
 
     // Beyond the Flutter cases
+
+    /** CONTRACT §11: the `url` of every entry follows the rule of every logged URL ([Urls.redact]). */
+    @Test
+    fun theUrlOfEveryEntryIsRedacted() {
+        val request = HttpLog.describeRequest(
+            "POST",
+            "https://user:SECRET_PW@api.payriff.com/api/v3/client/orders/7c9e6679-7425-40de-944b-e07fc1f90ae7/pay?x=1#f",
+            emptyMap(),
+            null,
+        )
+        assertEquals("https://api.payriff.com/api/v3/client/orders/7c9e…0ae7/pay", JSONObject(request).getString("url"))
+        val response = HttpLog.describeResponse(200, "GET", "https://acs.bank.example/c/SESSION_TOKEN?x=1", emptyMap(), null)
+        assertEquals("https://acs.bank.example", JSONObject(response).getString("url"))
+        for (text in listOf(request, response)) {
+            assertFalse(text, "SECRET_PW" in text || "SESSION_TOKEN" in text || "7c9e6679-7425" in text)
+        }
+    }
 
     @Test
     fun everySecretFieldIsRedactedWhateverItsCaseOrType() {
@@ -447,7 +476,7 @@ class HttpLogTest {
                 "responseId": "r-1",
                 "payload": {
                   "nextAction": "THREE_DS",
-                  "accessUrl": "https://acs.bank.example/c",
+                  "accessUrl": "https://acs.bank.example",
                   "clientRequest": [
                     {
                       "key": "creq",
@@ -462,6 +491,36 @@ class HttpLogTest {
         )
         val secrets = listOf(ciphertext, "WRAPPED+KEY/==", CLIENT_SECRET, PUBLISHABLE_KEY, "CREQ_SECRET", "QUERY_SECRET")
         for (line in logs.lines) for (secret in secrets) assertFalse("log leaks $secret: $line", secret in line)
+    }
+
+    /** The one-line entries of the general log shorten a long order id as the HTTP details do (CONTRACT §11). */
+    @Test
+    fun theOneLineEntriesShortenALongOrderId() = runTest {
+        Payriff.configure(PayriffConfig(enableLogging = true))
+        val transport = FakeTransport { testScheduler.currentTime }
+        transport.on("GET", "/api/v3/client/orders/$LONG_ORDER_ID", http(404, """{"code":"14040","message":"Not found"}"""))
+        logs.lines.clear()
+
+        val error = try {
+            CardApiClient(credentials(), transport).order(LONG_ORDER_ID)
+            null
+        } catch (e: PayriffError) {
+            e
+        }
+
+        assertEquals(PayriffErrorCode.SESSION_EXPIRED, error?.code)
+        val details = logs.lines.filter { it.startsWith("[Payriff] [DEBUG] HTTP request\n") || it.startsWith("[Payriff] [DEBUG] HTTP response\n") }
+        assertEquals(
+            listOf(
+                "[Payriff] [DEBUG] GET /api/v3/client/orders/7c9e…0ae7",
+                "[Payriff] [DEBUG] HTTP 404 for GET /api/v3/client/orders/7c9e…0ae7",
+                "[Payriff] [WARNING] GET /api/v3/client/orders/7c9e…0ae7 failed: SESSION_EXPIRED (HTTP 404, code 14040)",
+            ),
+            logs.lines - details.toSet(),
+        )
+        assertEquals(2, details.size)
+        for (entry in details) assertTrue(entry, "\"url\": \"https://api.payriff.com/api/v3/client/orders/7c9e…0ae7\"," in entry)
+        assertFalse(logs.lines.any { LONG_ORDER_ID in it })
     }
 
     /** The real transport hands the response headers to the log. */
@@ -511,6 +570,8 @@ class HttpLogTest {
     }
 
     private companion object {
+        const val LONG_ORDER_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+
         const val ORDER_RESPONSE =
             """{"code":"00000","message":"OK","payload":{"orderId":"o1","amount":10.5,"currency":"AZN","status":"CREATED","clientSecret":"pr_cs_SECRET_VALUE"}}"""
     }

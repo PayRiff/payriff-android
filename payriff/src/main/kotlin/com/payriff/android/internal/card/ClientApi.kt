@@ -122,8 +122,8 @@ internal interface CardApi {
  * - Timeouts: GET 15 s, POST 30 s.
  * - HTTP 429 is retried 3 times after 1 s, 2 s and 4 s; a `/pay` without any response is retried once after 1 s.
  *   Retries resend the identical request: the same bytes and the same idempotency key.
- * - Nothing secret is logged: the method, the path and the HTTP status, and in debuggable apps every request and
- *   response with its secrets redacted ([HttpLog], CONTRACT §11).
+ * - Nothing secret is logged: the method, the path ([Urls.redact], so a long order id is shortened) and the HTTP
+ *   status, and in debuggable apps every request and response with its secrets redacted ([HttpLog], CONTRACT §11).
  */
 internal class CardApiClient(
     private val credentials: CardCredentials,
@@ -173,14 +173,20 @@ internal class CardApiClient(
             return json.opt("payload") as? JSONObject ?: JSONObject()
         }
         val error = CardApiErrors.map(response.status, json)
-        PayriffLog.warning { "$method $path failed: ${error.code} (HTTP ${response.status}, code ${error.payriffCode})" }
+        PayriffLog.warning { "$method ${loggedPath(request)} failed: ${error.code} (HTTP ${response.status}, code ${error.payriffCode})" }
         throw error
     }
+
+    /**
+     * The path of [request] as the log shows it: its URL redacted with [Urls.redact] (CONTRACT §11), which shortens a
+     * long segment such as the order id, without the API host.
+     */
+    private fun loggedPath(request: HttpRequest): String = Urls.redact(request.url).removePrefix(credentials.host)
 
     private suspend fun send(request: HttpRequest, timeoutMillis: Long, retryNetworkOnce: Boolean): HttpResponse {
         var rateLimitRetries = 0
         var networkRetried = false
-        val path = request.url.removePrefix(credentials.host)
+        val path = loggedPath(request)
         while (true) {
             PayriffLog.debug { "${request.method} $path" }
             HttpLog.logRequest(request)

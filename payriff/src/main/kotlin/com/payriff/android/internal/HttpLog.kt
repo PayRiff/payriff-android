@@ -16,7 +16,8 @@ import java.util.Locale
  *
  * Only debuggable host apps log them ([isOn]), and only while logging is on. Headers are sorted by name. The body is
  * the parsed JSON body, with its members in the order received and its numbers as written, or `null` when it is
- * empty. Secrets are redacted with the rules of the other Payriff SDKs ([redactHeaders], [redactBody]).
+ * empty. Secrets are redacted with the rules of the other Payriff SDKs ([redactHeaders], [redactBody]). The URL of the
+ * request and the URLs in a body are redacted with [Urls.redact], like every URL in the log.
  *
  * String values are decoded into char arrays that are zeroed once the entry is written, so a redacted value, such as
  * the encrypted card of `/pay`, never becomes a `String` (CONTRACT §16.5).
@@ -88,7 +89,7 @@ internal object HttpLog {
 
     /** The request as pretty-printed JSON: `method`, `url`, `headers` and `body` ([body]: the bytes sent, UTF-8). */
     fun describeRequest(method: String, url: String, headers: Map<String, String>, body: ByteArray?): String {
-        val head = listOf("method" to Json.Str(method), "url" to Json.Str(redactUrl(url)), "headers" to headersJson(headers))
+        val head = listOf("method" to Json.Str(method), "url" to Json.Str(Urls.redact(url)), "headers" to headersJson(headers))
         if (body == null || body.isEmpty()) return entry(head, null)
         // UTF-8 never decodes to more chars than it has bytes, so this one array holds the whole text and is wiped.
         val chars = CharArray(body.size)
@@ -113,7 +114,7 @@ internal object HttpLog {
             listOf(
                 "status" to Json.Literal(status.toString()),
                 "method" to Json.Str(method),
-                "url" to Json.Str(redactUrl(url)),
+                "url" to Json.Str(Urls.redact(url)),
                 "headers" to headersJson(headers),
             ),
             body,
@@ -141,7 +142,7 @@ internal object HttpLog {
 
     /**
      * The logged form of [body], as compact JSON: secret fields as `***(<length>)` at any depth, the values of
-     * `{key, value}` form fields hidden, card numbers as `****<last 4>`, http(s) URLs without query and fragment; a
+     * `{key, value}` form fields hidden, card numbers as `****<last 4>`, http(s) URLs redacted by [Urls.redact]; a
      * description (a JSON string) when the body is not JSON or its redacted JSON is too long; `null` when it is empty.
      */
     @VisibleForTesting
@@ -154,20 +155,6 @@ internal object HttpLog {
         } finally {
             reader.wipe()
         }
-    }
-
-    /**
-     * [url] as CONTRACT §11 logs it: an http(s) (or relative) URL without its query and fragment, any other scheme only
-     * as `<scheme>:…`.
-     */
-    fun redactUrl(url: CharSequence): String {
-        val colon = url.indexOf(':')
-        if (colon > 0 && isScheme(url, colon)) {
-            val scheme = url.subSequence(0, colon).toString()
-            if (!scheme.equals("http", ignoreCase = true) && !scheme.equals("https", ignoreCase = true)) return "$scheme:…"
-        }
-        val end = url.indexOfFirst { it == '?' || it == '#' }
-        return url.subSequence(0, if (end < 0) url.length else end).toString()
     }
 
     /** One log entry: the [head] fields, then `body` parsed from [body] and redacted. Wipes what it decoded. */
@@ -225,7 +212,7 @@ internal object HttpLog {
         return when {
             lower != null && lower in SECRET_FIELDS -> Json.Str(secret(plainLength(value)))
             lower != null && lower in PAN_FIELDS -> maskPan(value)
-            value is Json.Str && isHttpUrl(value.text) -> Json.Str(redactUrl(value.text))
+            value is Json.Str && isHttpUrl(value.text) -> Json.Str(Urls.redact(value.text))
             else -> value
         }
     }
@@ -269,20 +256,9 @@ internal object HttpLog {
 
     private fun secret(length: Int): String = "***($length)"
 
+    /** Whether a body string is an http(s) URL, which the log shows redacted ([Urls.redact]). */
     private fun isHttpUrl(text: CharSequence): Boolean =
         text.startsWith("http://", ignoreCase = true) || text.startsWith("https://", ignoreCase = true)
-
-    /** Whether `url[0 until colon]` is a URL scheme: a letter, then letters, digits, `+`, `.` or `-`. */
-    private fun isScheme(url: CharSequence, colon: Int): Boolean {
-        if (!url[0].isAsciiLetter()) return false
-        for (i in 1 until colon) {
-            val c = url[i]
-            if (!c.isAsciiLetter() && c !in '0'..'9' && c != '+' && c != '.' && c != '-') return false
-        }
-        return true
-    }
-
-    private fun Char.isAsciiLetter(): Boolean = this in 'a'..'z' || this in 'A'..'Z'
 
     /** The UTF-8 length of [text]; a lone surrogate counts as the 3 bytes of U+FFFD, which encoders write for it. */
     private fun utf8Length(text: CharSequence): Int {

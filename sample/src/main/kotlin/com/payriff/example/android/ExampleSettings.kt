@@ -21,7 +21,7 @@ object ExampleSettings {
     /**
      * [publishableKey] (blank: none) in [environment], `SANDBOX` or `PRODUCTION` in any case (anything else is
      * `SANDBOX`), with logging on. The SDK's security defaults stay: to pay from a rooted or hooked test device, add
-     * `allowCompromisedDevices = true` here for that run, and never ship it.
+     * `allowCompromisedDevices = true` here for that run of the debug build. Release builds ignore it, with a warning.
      */
     fun config(publishableKey: String, environment: String): PayriffConfig = PayriffConfig(
         publishableKey = publishableKey,

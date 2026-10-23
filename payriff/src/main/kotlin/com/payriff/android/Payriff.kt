@@ -113,7 +113,7 @@ public object Payriff {
      * (CONTRACT §16.16). The check is local and best-effort: it stops the common tools but a determined attacker can
      * bypass it. Call it to decide early, for example to offer another payment method; card payments already run the
      * same check and refuse a compromised device with [PayriffErrorCode.DEVICE_COMPROMISED], unless
-     * [PayriffConfig.allowCompromisedDevices] is on.
+     * [PayriffConfig.allowCompromisedDevices] is on in a debuggable app.
      *
      * The check fails closed: when it cannot complete, for example because one of its probes throws, the device counts
      * as compromised with the signal `check failed`, and this returns `true`.

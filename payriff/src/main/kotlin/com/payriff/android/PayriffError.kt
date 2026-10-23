@@ -77,8 +77,8 @@ public enum class PayriffErrorCode {
     /**
      * The device looks rooted or tampered with, or a hooking framework is loaded, so the card payment was refused
      * on it ([Payriff.isDeviceCompromised], CONTRACT §16.16). A check that cannot complete counts too: it fails closed.
-     * Never retryable and not fatal: the same order can be paid on another device. Set
-     * [PayriffConfig.allowCompromisedDevices] to allow it anyway, for development only.
+     * Never retryable and not fatal: the same order can be paid on another device. For development, a debuggable app
+     * can allow it anyway with [PayriffConfig.allowCompromisedDevices]; release builds ignore that flag.
      */
     DEVICE_COMPROMISED,
 }

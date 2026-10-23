@@ -25,10 +25,12 @@ package com.payriff.android
  * @property allowScreenCaptureInDebug Debug builds only: lets screenshots and screen recordings capture the card form
  *   and the 3-D Secure sheet, for example for QA. They are otherwise protected with `FLAG_SECURE`. Release builds ignore
  *   it and always protect them. Defaults to `false`.
- * @property allowCompromisedDevices Lets card payments run on a rooted device, when a hooking framework is detected,
- *   or when the check cannot complete ([Payriff.isDeviceCompromised], CONTRACT §16.16). The default (`false`) refuses
- *   them with [PayriffErrorCode.DEVICE_COMPROMISED]; `true` only logs a warning. Turn it on **only for development** on
- *   rooted or hooked test devices, never in a shipped build.
+ * @property allowCompromisedDevices Debug builds only: lets card payments run on a rooted device, when a hooking
+ *   framework is detected, or when the check cannot complete ([Payriff.isDeviceCompromised], CONTRACT §16.16), with a
+ *   warning, for development on rooted or hooked test devices. Otherwise they are refused with
+ *   [PayriffErrorCode.DEVICE_COMPROMISED]. Only a debuggable app (`ApplicationInfo.FLAG_DEBUGGABLE`) may opt out:
+ *   release builds ignore it, with a warning, and refuse such devices, so leaving it on cannot reach production.
+ *   Defaults to `false`.
  */
 public class PayriffConfig(
     publishableKey: String? = null,
@@ -84,7 +86,7 @@ public class PayriffConfig(
         /** Sets [PayriffConfig.allowScreenCaptureInDebug]. Debug builds only. */
         public fun allowScreenCaptureInDebug(value: Boolean): Builder = apply { allowScreenCaptureInDebug = value }
 
-        /** Sets [PayriffConfig.allowCompromisedDevices]. For development only. */
+        /** Sets [PayriffConfig.allowCompromisedDevices]. Debug builds only. */
         public fun allowCompromisedDevices(value: Boolean): Builder = apply { allowCompromisedDevices = value }
 
         /** Creates the configuration. Never throws; see [PayriffConfig] for validation. */

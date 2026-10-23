@@ -56,9 +56,9 @@
   cached for the process while the Frida/hooking/debugger checks run fresh. It fails closed: a check that cannot
   complete (a probe throws) counts as compromised with the signal `check failed`, and `isDeviceCompromised` returns
   `true`.
-- `PayriffConfig.allowCompromisedDevices` (default `false`): for development only, lets card payments run on a rooted or
-  hooked device, or after a check that could not complete, with a warning that names the matched signals, instead of
-  refusing them.
+- `PayriffConfig.allowCompromisedDevices` (default `false`): for development in debuggable apps only, lets card payments
+  run on a rooted or hooked device, or after a check that could not complete, with a warning that names the matched
+  signals, instead of refusing them. Release builds ignore it (see Security).
 - `Payriff.retrieveOrder` with `PayriffClientOrder` (suspending, plus a Java callback variant).
 - A typed `PayriffResult` (`Success`, `Declined`, `Cancelled`, `Pending`, `Failed`) with the JSON shape shared by every
   Payriff SDK, and `PayriffError` with `isFatal`, `fields` and the card error codes, including `DEVICE_COMPROMISED`.
@@ -75,8 +75,8 @@
 - `PayriffLogger` with privacy-safe log entries (`PayriffLogEntry.formatted`, `timestampMillis`).
 - HTTP details (CONTRACT §11): with logging on in a debuggable app, every Client API call also logs its request and
   response as pretty-printed JSON with headers and body at `DEBUG` level, with keys, client secrets, card fields and
-  bank form values redacted, card numbers cut to their last 4 digits and URL queries removed; release builds never log
-  them.
+  bank form values redacted, card numbers cut to their last 4 digits and URLs redacted as in the rest of the log (see
+  Security); release builds never log them.
 - Helpers shared with the other Payriff SDKs: `Payriff.version`, `Payriff.isPaymentInProgress`,
   `PayriffEnvironment.apiBaseUrl`, `PayriffPaymentStatus.fromRaw`, and `isSuccess`, `payment`, `error` and `toJson()`
   on every `PayriffResult`.
@@ -97,6 +97,14 @@
   cannot complete, the device counts as compromised (`check failed`), so breaking the check does not skip it. The
   warning names the matched signals (for example `su binary`, `Magisk`, `Frida`) and never file contents. The manifest declares the root-manager
   and Xposed packages in `<queries>` so they can be seen on Android 11+, without the `QUERY_ALL_PACKAGES` permission.
+- `PayriffConfig.allowCompromisedDevices` works only in debuggable apps (`ApplicationInfo.FLAG_DEBUGGABLE`, CONTRACT
+  §16.16): a release build ignores it, logs a warning that it is ignored outside debug builds and refuses a compromised
+  device as by default, so leaving it on cannot reach production.
+- URLs in the logs (CONTRACT §11): one redaction covers the general log, the HTTP details and URLs inside logged
+  bodies. User info (`user:password@`), queries and fragments are never logged. The path is kept only for Payriff's API
+  hosts (`api.payriff.com`, `sb-api.payriff.com`), with every segment of 16 or more characters cut to its first and last
+  4 characters (`/api/v3/client/orders/7c9e…0ae7/pay`); any other host, such as a bank's 3-D Secure page, is logged as
+  `scheme://host[:port]`, and any other scheme as `<scheme>:…`.
 - The secret key is never part of the SDK or the example app: no configuration, call or test uses it.
 - The card form's window, the 3-D Secure sheet and its close confirmation use `FLAG_SECURE`, and on Android 14+ the
   bank page is marked accessibility-data-sensitive. Debuggable apps may opt out with
