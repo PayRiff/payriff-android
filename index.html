@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Payriff Android SDK Maven repository</title>
+<style>body{font:16px/1.6 system-ui,sans-serif;max-width:720px;margin:48px auto;padding:0 16px;color:#102a3a}code,pre{font-family:ui-monospace,Menlo,monospace}pre{background:#0e2230;color:#d6e4ec;padding:16px;border-radius:10px;overflow-x:auto}</style></head>
+<body>
+<h1>Payriff Android SDK</h1>
+<p>This is Payriff's Maven repository for <code>com.payriff:payriff-android</code>, built and published from <a href="https://github.com/PayRiff/payriff-android">github.com/PayRiff/payriff-android</a> by its release workflow.</p>
+<pre>// settings.gradle.kts
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven("https://payriff.github.io/payriff-android/maven") {
+            content { includeGroup("com.payriff") }
+        }
+    }
+}</pre>
+<p>See the <a href="https://github.com/PayRiff/payriff-android#installation">README</a> for the current version.</p>
+</body>
+</html>
