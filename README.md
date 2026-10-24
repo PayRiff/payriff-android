@@ -49,26 +49,7 @@ Documentation of the Payriff API: <https://docs.payriff.com>
 
 ## Installation
 
-Version 1.0.0 is not on Maven Central yet. Until it is, build it from this repository into your local Maven
-repository and add `mavenLocal()` for the `com.payriff` group:
-
-```sh
-git clone https://github.com/PayRiff/payriff-android.git
-cd payriff-android && ./gradlew :payriff:publishToMavenLocal
-```
-
-```kotlin
-// settings.gradle.kts (until the Maven Central release)
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        mavenLocal { content { includeGroup("com.payriff") } }
-    }
-}
-```
-
-After the release, Maven Central is enough:
+Payriff publishes the SDK to its own Maven repository, built from this repository by its release workflow:
 
 ```kotlin
 // settings.gradle.kts
@@ -76,14 +57,20 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven("https://payriff.github.io/payriff-android/maven") {
+            content { includeGroup("com.payriff") }
+        }
     }
 }
 
 // app/build.gradle.kts
 dependencies {
-    implementation("com.payriff:payriff-android:1.0.0")
+    implementation("com.payriff:payriff-android:1.0.0-rc.1")
 }
 ```
+
+`1.0.0-rc.1` is the release candidate of 1.0.0. The coordinates stay the same when the SDK also goes to Maven
+Central; then the `maven(...)` line can go.
 
 The library manifest is merged into your app automatically. It adds the `INTERNET` permission, the 3-D Secure activity and a small start-up provider (see [Platform notes](#platform-notes)). No ProGuard/R8 rules are required.
 

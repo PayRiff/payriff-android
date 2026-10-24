@@ -147,3 +147,14 @@ mavenPublishing {
         }
     }
 }
+
+// Payriff's own Maven repository on GitHub Pages (https://payriff.github.io/payriff-android/maven), until Maven
+// Central. The release workflow publishes into a checkout of the gh-pages branch, passed as -PpagesMavenDir.
+publishing {
+    repositories {
+        maven {
+            name = "githubPages"
+            url = uri(providers.gradleProperty("pagesMavenDir").orElse(layout.buildDirectory.dir("pages-maven").map { it.asFile.path }).get())
+        }
+    }
+}
