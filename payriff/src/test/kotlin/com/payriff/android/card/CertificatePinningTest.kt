@@ -1,10 +1,14 @@
 package com.payriff.android.card
 
+import com.payriff.android.PayriffConfig
+import com.payriff.android.PayriffEnvironment
 import com.payriff.android.PayriffError
 import com.payriff.android.PayriffErrorCode
+import com.payriff.android.PayriffRegion
 import com.payriff.android.internal.CertificatePinning
 import com.payriff.android.internal.CertificatePinningException
 import com.payriff.android.internal.HttpTransport
+import com.payriff.android.internal.Urls
 import com.payriff.android.internal.card.CardApiClient
 import com.payriff.android.internal.card.EncryptedCard
 import com.payriff.android.testing.Vectors
@@ -21,8 +25,8 @@ import java.security.cert.X509Certificate
 
 /**
  * Certificate pinning (CONTRACT §16.15, `vectors/tls_pins.json`): the SDK's pins and hosts equal the vector, the pure
- * pin check accepts the chain the server serves and refuses an interception chain, and a pinning failure maps to a
- * non-retryable `NETWORK_ERROR`. The check runs on the parsed certificates alone, never on a live TLS connection.
+ * pin check accepts the chains api.payriff.com and api.gccpay.sa serve and refuses an interception chain, and a pinning
+ * failure maps to a non-retryable `NETWORK_ERROR`. The check runs on the parsed certificates alone, never on a live TLS connection.
  */
 class CertificatePinningTest {
 
@@ -43,9 +47,18 @@ class CertificatePinningTest {
         val pins = vector.getJSONArray("pins").objects().map { it.getString("spkiSha256") }.toSet()
         assertEquals(pins, CertificatePinning.PINS)
         assertTrue(CertificatePinning.isPinned("api.payriff.com"))
+        assertTrue(CertificatePinning.isPinned("api.gccpay.sa"))
         assertTrue("host is compared case-insensitively", CertificatePinning.isPinned("SB-API.payriff.com"))
-        assertFalse(CertificatePinning.isPinned("pay.payriff.com"))
+        assertTrue("host is compared case-insensitively", CertificatePinning.isPinned("API.GccPay.SA"))
+        for (other in listOf("pay.payriff.com", "pay.gccpay.sa", "gccpay.sa", "evil-api.gccpay.sa", "api.gccpay.sa.evil.example")) {
+            assertFalse("exact hosts only: $other", CertificatePinning.isPinned(other))
+        }
         assertFalse(CertificatePinning.isPinned(null))
+        // The host of every region and environment (PayriffConfig.apiBaseUrl) is pinned, and nothing else.
+        val apiHosts = PayriffRegion.entries.flatMap { region ->
+            PayriffEnvironment.entries.map { Urls.parse(PayriffConfig(environment = it, region = region).apiBaseUrl)?.host }
+        }.toSet()
+        assertEquals(CertificatePinning.PINNED_HOSTS, apiHosts)
     }
 
     @Test
@@ -73,6 +86,15 @@ class CertificatePinningTest {
 
         val intercepted = chain("interceptedChain")
         assertFalse("an interception CA has no pinned key", CertificatePinning.chainIsPinned(intercepted))
+    }
+
+    @Test
+    fun theGccpayChainPasses() {
+        val gccpay = chain("gccpayChain")
+        assertTrue("api.gccpay.sa's chain carries a pinned CA key", CertificatePinning.chainIsPinned(gccpay))
+        // Leaf -> WR3 -> GTS Root R1 (cross-signed): the root's key is pinned, not the leaf, so a leaf renewal keeps working.
+        assertFalse("the leaf is not pinned", CertificatePinning.spkiSha256(gccpay.first()) in CertificatePinning.PINS)
+        assertTrue("GTS Root R1 is pinned", CertificatePinning.spkiSha256(gccpay.last()) in CertificatePinning.PINS)
     }
 
     @Test

@@ -3,11 +3,13 @@ package com.payriff.example.android
 import android.content.Context
 import com.payriff.android.PayriffConfig
 import com.payriff.android.PayriffEnvironment
+import com.payriff.android.PayriffRegion
 
 /**
  * The example's settings, compiled into the debug build from the git-ignored local.properties: the publishable key
- * (`payriff.publishableKey`) and the environment (`payriff.environment`). Release builds have no publishable key. SDK
- * logs go to Logcat (tag `Payriff`). There is no secret key: the order comes from your backend.
+ * (`payriff.publishableKey`), the environment (`payriff.environment`) and the region (`payriff.region`). Release builds
+ * have no publishable key. SDK logs go to Logcat (tag `Payriff`). There is no secret key: the order comes from your
+ * backend.
  */
 object ExampleSettings {
 
@@ -16,17 +18,21 @@ object ExampleSettings {
         get() = BuildConfig.PAYRIFF_PUBLISHABLE_KEY.isNotBlank()
 
     /** The configuration of this build. */
-    fun config(): PayriffConfig = config(BuildConfig.PAYRIFF_PUBLISHABLE_KEY, BuildConfig.PAYRIFF_ENVIRONMENT)
+    fun config(): PayriffConfig =
+        config(BuildConfig.PAYRIFF_PUBLISHABLE_KEY, BuildConfig.PAYRIFF_ENVIRONMENT, BuildConfig.PAYRIFF_REGION)
 
     /**
      * [publishableKey] (blank: none) in [environment], `SANDBOX` or `PRODUCTION` in any case (anything else is
-     * `SANDBOX`), with logging on. The SDK's security defaults stay: to pay from a rooted or hooked test device, add
-     * `allowCompromisedDevices = true` here for that run of the debug build. Release builds ignore it, with a warning.
+     * `SANDBOX`), and [region], `AZ` or `SA` in any case (anything else is `AZ`), with logging on. Region `SA` has no
+     * sandbox: with it, `SANDBOX` payments go to production and charge real cards, and the SDK logs a warning. The SDK's
+     * security defaults stay: to pay from a rooted or hooked test device, add `allowCompromisedDevices = true` here for
+     * that run of the debug build. Release builds ignore it, with a warning.
      */
-    fun config(publishableKey: String, environment: String): PayriffConfig = PayriffConfig(
+    fun config(publishableKey: String, environment: String, region: String): PayriffConfig = PayriffConfig(
         publishableKey = publishableKey,
         environment = PayriffEnvironment.entries.firstOrNull { it.name.equals(environment.trim(), ignoreCase = true) }
             ?: PayriffEnvironment.SANDBOX,
+        region = PayriffRegion.entries.firstOrNull { it.name.equals(region.trim(), ignoreCase = true) } ?: PayriffRegion.AZ,
         enableLogging = true,
     )
 

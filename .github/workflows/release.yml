@@ -1,6 +1,6 @@
 name: Release
 
-# A version tag (for example 1.0.0-rc.1) publishes com.payriff:payriff-android to Payriff's
+# A version tag (for example 1.0.0-rc.2) publishes com.payriff:payriff-android to Payriff's
 # Maven repository on GitHub Pages (the gh-pages branch, https://payriff.github.io/payriff-android/maven),
 # then creates the GitHub release. A version that is already there is never overwritten.
 on:

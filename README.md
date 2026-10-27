@@ -18,6 +18,7 @@ Documentation of the Payriff API: <https://docs.payriff.com>
 - [How it works](#how-it-works)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
+  - [Regions](#regions)
 - [The payment view](#the-payment-view)
   - [Full screen, bottom sheet or dialog](#full-screen-bottom-sheet-or-dialog)
   - [Customise the payment view](#customise-the-payment-view)
@@ -65,24 +66,24 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-    implementation("com.payriff:payriff-android:1.0.0-rc.1")
+    implementation("com.payriff:payriff-android:1.0.0-rc.2")
 }
 ```
 
-`1.0.0-rc.1` is the release candidate of 1.0.0. The coordinates stay the same when the SDK also goes to Maven
+`1.0.0-rc.2` is the release candidate of 1.0.0. The coordinates stay the same when the SDK also goes to Maven
 Central; then the `maven(...)` line can go.
 
 The library manifest is merged into your app automatically. It adds the `INTERNET` permission, the 3-D Secure activity and a small start-up provider (see [Platform notes](#platform-notes)). No ProGuard/R8 rules are required.
 
 ## How it works
 
-1. **Your server creates the order** with its secret key: `POST https://api.payriff.com/api/v3/orders` with the header `Authorization: <secret key>`. It returns the order's `orderId` and `clientSecret` (`pr_cs_…`) to the app. The SDK never creates orders and never sees the secret key.
+1. **Your server creates the order** with its secret key: `POST https://api.payriff.com/api/v3/orders` (in region `SA`, `https://api.gccpay.sa/api/v3/orders`) with the header `Authorization: <secret key>`. It returns the order's `orderId` and `clientSecret` (`pr_cs_…`) to the app. The SDK never creates orders and never sees the secret key.
 2. **The app configures the SDK** once with its publishable key.
 3. **The app shows `PayriffPaymentView`** with the `orderId` and the `clientSecret`. The view loads the order and shows its amount on the Pay button.
 4. **The customer enters the card and taps Pay.** The SDK checks that the order is payable by card, encrypts the card, sends it, runs the bank's 3-D Secure step in its sheet and polls the status. The view passes the result to your listener.
 5. **Your server fulfils the order** after it has confirmed the payment itself. See [Fulfil on your server](#fulfil-on-your-server).
 
-Every call of the SDK goes to Payriff's Client API (`/api/v3/client/orders/…`) with the publishable key and the order's client secret only.
+Every call of the SDK goes to Payriff's Client API (`/api/v3/client/orders/…`) on the host of your [region](#regions) and environment, with the publishable key and the order's client secret only.
 
 ## Quick start
 
@@ -182,7 +183,8 @@ paymentView.setOrder(orderId, clientSecret);
 | `PayriffConfig` | Type | Default | Notes |
 |---|---|---|---|
 | `publishableKey` | `String?` | `null` | Your publishable key (`pr_pk_live_…`), trimmed. Safe to ship in the app. Missing or not a publishable key: every card call fails with `INVALID_CONFIG`. |
-| `environment` | `PayriffEnvironment` | `PRODUCTION` | `PRODUCTION` (`https://api.payriff.com`) or `SANDBOX` (`https://sb-api.payriff.com`, provisional until Payriff confirms the sandbox host) |
+| `environment` | `PayriffEnvironment` | `PRODUCTION` | `PRODUCTION` or `SANDBOX`. With `region` it picks the API host; see [Regions](#regions). |
+| `region` | `PayriffRegion` | `AZ` | `AZ` (`api.payriff.com`) or `SA` (Saudi Arabia, GCC Pay, `api.gccpay.sa`). **`SA` has no sandbox**; see [Regions](#regions). |
 | `language` | `PayriffLanguage?` | `null` | Language of the form and the 3-D Secure sheet. `null` uses the device language: `az*` gives `AZ`, `ru*` gives `RU`, anything else `EN`. |
 | `enableLogging` | `Boolean` | `false` | See [Logging](#logging) |
 | `allowScreenCaptureInDebug` | `Boolean` | `false` | Debug builds only: lets screenshots and screen recordings capture the form and the 3-D Secure sheet, for QA. Release builds ignore it; see [Platform notes](#platform-notes). |
@@ -191,6 +193,30 @@ paymentView.setOrder(orderId, clientSecret);
 `Payriff.configure` may be called again; the new configuration applies to calls started afterwards. It never throws. A `publishableKey` that is not a publishable key, for example a secret key pasted by mistake, is logged as a warning (`Invalid configuration: …`, when logging is on). `PayriffConfig.toString()` is safe to log: the key appears as `pr_pk_live_***(<length>)`.
 
 Every call needs `Payriff.configure` first; before it, card calls fail with `NOT_CONFIGURED`.
+
+### Regions
+
+`region` and `environment` pick the host of every card call. `PayriffConfig.apiBaseUrl` returns it:
+
+| `region` | `environment` | API base URL | |
+|---|---|---|---|
+| `AZ` (default) | `PRODUCTION` | `https://api.payriff.com` | |
+| `AZ` | `SANDBOX` | `https://sb-api.payriff.com` | Provisional until Payriff confirms the sandbox host |
+| `SA` | `PRODUCTION` | `https://api.gccpay.sa` | Saudi Arabia (GCC Pay) |
+| `SA` | `SANDBOX` | `https://api.gccpay.sa` | **No Saudi sandbox: production** |
+
+```kotlin
+Payriff.configure(
+    PayriffConfig(
+        publishableKey = "pr_pk_live_…",
+        region = PayriffRegion.SA,
+    ),
+)
+```
+
+> **Warning: region `SA` has no sandbox.** With `region = PayriffRegion.SA`, `environment = PayriffEnvironment.SANDBOX` still sends card payments to production (`https://api.gccpay.sa`), so they **charge real cards**. `configure` logs a warning for that combination (when logging is on): `Region sa has no sandbox: card payments go to production (https://api.gccpay.sa) and charge real cards.`
+
+Everything else is the same in both regions: the endpoints and headers, the publishable-key rule, the card encryption key, 3-D Secure and the results. Create the order through the same region's API (`https://api.gccpay.sa/api/v3/orders` for `SA`): the SDK looks for it on that region's host.
 
 ## The payment view
 
@@ -463,7 +489,7 @@ The result the SDK returns is for your app's UI only. It is worked out on the cu
 | SDK version | `Payriff.version` (also the constant `Payriff.VERSION`) |
 | A card payment is running | `Payriff.isPaymentInProgress` |
 | The device looks compromised | `Payriff.isDeviceCompromised(context)` |
-| API base URL | `PayriffEnvironment.apiBaseUrl`, for example `https://sb-api.payriff.com` |
+| API base URL | `PayriffConfig.apiBaseUrl`, the host of its `region` and `environment`, for example `https://api.gccpay.sa` |
 | Status parser | `PayriffPaymentStatus.fromRaw(raw)` (aliases such as `PAID` give `APPROVED`) |
 | Result helpers | `result.isSuccess`, `result.payment`, `result.error` |
 | Result JSON | `result.toJson()` |
@@ -484,7 +510,7 @@ In debuggable apps, each Client API call also logs its request and response as p
 Privacy rules:
 
 - Card data is never logged. Keys, client secrets, the encrypted card, the wrapped key and 3-D Secure form values appear as `***(<length>)`, the publishable key as `pr_pk_live_***(<length>)`, and card numbers in a response as their last 4 digits.
-- URLs never show their user info (`user:password@`), query or fragment. The path is kept only for Payriff's API hosts (`api.payriff.com`, `sb-api.payriff.com`), with every segment of 16 or more characters shortened to its first and last 4 characters (`/api/v3/client/orders/7c9e…0ae7/pay`). Any other host, such as a bank's 3-D Secure page, appears as `https://host[:port]` only, and a URL with any other scheme only as `<scheme>:…`, so a `tel:` number or a `mailto:` address never reaches the logs. The same rule applies to every line, the HTTP details and the URLs inside logged bodies included.
+- URLs never show their user info (`user:password@`), query or fragment. The path is kept only for Payriff's API hosts (`api.payriff.com`, `sb-api.payriff.com`, `api.gccpay.sa`), with every segment of 16 or more characters shortened to its first and last 4 characters (`/api/v3/client/orders/7c9e…0ae7/pay`). Any other host, such as a bank's 3-D Secure page, appears as `https://host[:port]` only, and a URL with any other scheme only as `<scheme>:…`, so a `tel:` number or a `mailto:` address never reaches the logs. The same rule applies to every line, the HTTP details and the URLs inside logged bodies included.
 - The SDK never reads the content of the bank's pages.
 
 ## Platform notes
@@ -499,7 +525,7 @@ Privacy rules:
 - **App identity.** Every Client API request carries your package name as `X-Client-App-Id`, and never `Origin` or `Authorization`. Payriff allows your publishable key only for the package names you registered.
 - **Start-up provider.** The SDK's manifest adds a small content provider (`com.payriff.android.internal.PayriffInitProvider`). When your process starts, it records your package name and whether the app is debuggable, so `Payriff.retrieveOrder` works without a `Context`. It is not exported, stores nothing and does no I/O. If you remove it from your merged manifest (`tools:node="remove"`), the SDK learns this at the first card payment instead and, until then, treats the app as a release build.
 - **Security.** The 3-D Secure activity is not exported, never injects JavaScript, does not change the user agent, never proceeds on TLS errors, blocks plain-http pages, and keeps third-party cookies on only for its own WebViews (3-D Secure needs them).
-- **Certificate pinning.** Every Client API call (order, pay, the 3-D Secure step, status) to `api.payriff.com` and `sb-api.payriff.com` is pinned: the SDK keeps Android's normal TLS validation and also requires a pinned Payriff CA key in the validated chain. A proxy's or a mis-issued certificate is refused with a non-retryable `NETWORK_ERROR` ("Payriff's server certificate could not be verified."), and nothing is sent. The pins are CA keys, not the leaf, so the yearly certificate renewal keeps working, and there is no switch to turn pinning off. The 3-D Secure WebViews load the banks' own pages and are **not** pinned.
+- **Certificate pinning.** Every Client API call (order, pay, the 3-D Secure step, status) to `api.payriff.com`, `sb-api.payriff.com` and `api.gccpay.sa` is pinned: the SDK keeps Android's normal TLS validation and also requires a pinned CA key in the validated chain (Sectigo for `*.payriff.com`, Google Trust Services' GTS Root R1 and R4 for `*.gccpay.sa`, plus backup roots of other major CAs). A proxy's or a mis-issued certificate is refused with a non-retryable `NETWORK_ERROR` ("Payriff's server certificate could not be verified."), and nothing is sent. The pins are CA keys, not the leaf, so the yearly certificate renewal keeps working, and there is no switch to turn pinning off. The 3-D Secure WebViews load the banks' own pages and are **not** pinned.
 - **Device integrity.** Before a card payment, and again just before the card is encrypted, the SDK checks for a rooted or tampered device and a loaded hooking framework: an `su` binary, Magisk/KernelSU/APatch files, an installed root-manager app, Xposed/LSPosed, Frida, or a debugger attached to a release build. On a match it refuses the payment with `DEVICE_COMPROMISED` ("Card payments are not available on this device."); `PayriffPaymentView` then shows "Card payments aren't available on this device for security reasons", keeps Pay disabled and does not load the order. Call `Payriff.isDeviceCompromised(context)` to check yourself, for example to offer another method. The check fails closed: if it cannot complete (one of its probes throws), the device counts as compromised with the signal `check failed`, so breaking the check does not skip it, and `isDeviceCompromised` returns `true`. The checks are local and best-effort: they stop the common tools, not a determined attacker. For development on a rooted or hooked test device, a debug build can set `PayriffConfig(allowCompromisedDevices = true)`, which only logs a warning naming the matched signals, `check failed` included. The opt-out works only while the app is debuggable (`ApplicationInfo.FLAG_DEBUGGABLE`): a release build ignores it, logs a warning that it is ignored outside debug builds, and refuses the payment as by default, so leaving it on cannot reach production. Emulators, `test-keys` builds and custom ROMs are not treated as compromised on their own.
 - **3-D Secure website data.** When a payment that showed 3-D Secure pages ends, the SDK removes what those pages left: the cookies of the hosts they loaded — expired for `Path=/` and for every path prefix of each page's URL, with and without the `/` that follows it in the path (`/acs`, `/acs/`, `/acs/challenge`), as the Flutter SDK does, for the host and its parent domains, with `; Secure` added for https pages (so `__Secure-`/`__Host-` cookies go too) — the storage that `WebStorage.deleteOrigin` clears for those hosts, and the WebView HTTP cache. Android keeps WebView data per app, so your own WebViews lose the same data for those hosts too, and the HTTP cache is cleared for the whole app.
 
@@ -509,7 +535,8 @@ These are documented platform limits, not bugs.
 
 | Limitation | Consequence or mitigation |
 |---|---|
-| The sandbox host (`https://sb-api.payriff.com`) is provisional. | It is one constant in the SDK; it changes if Payriff confirms another host. |
+| The sandbox host of region `AZ` (`https://sb-api.payriff.com`) is provisional. | It is one constant in the SDK; it changes if Payriff confirms another host. |
+| Region `SA` has no sandbox. | `SANDBOX` with `region = SA` goes to production (`https://api.gccpay.sa`) and charges real cards; `configure` logs a warning. |
 | The renderer-crash callback (`onRenderProcessGone`) exists only on Android 8.0 (API 26) and newer. | On API 24 and 25 a WebView renderer crash during 3-D Secure ends the app process. The process-death restore then applies: one status check. |
 
 ## Example app
@@ -520,11 +547,14 @@ The `sample` module (application id `com.payriff.example.android`) has one scree
 - **Pay in page**, **Pay in bottom sheet** and **Pay in popup** show the SDK's `PayriffPaymentView` for that order: on a screen of its own under a back button (`PaymentActivity`), in a `BottomSheetDialogFragment` sized to its content (`PaymentSheetFragment`) or in a `DialogFragment` (`PaymentPopupFragment`). 3-D Secure opens in the SDK's sheet. Each closes with the view's first result; while a payment runs, back and the other ways to close it do nothing.
 - The outcome opens in a result dialog: a large icon and title ("Payment successful", "Payment declined", "Payment pending", "Payment cancelled" or "Payment failed"), the amount, the order id, the status and the result JSON. Any result but a failure clears the fields: an order can be paid once.
 
-The example holds no secret key and creates no orders: your server creates the order with its secret key (`POST /api/v3/orders`) and returns `orderId` and `clientSecret`. Payriff accepts the publishable key only from the package names you registered for it, so ask Payriff to allow `com.payriff.example.android`. The publishable key and the environment come from `local.properties` in the repository root, which is git-ignored (start from `local.properties.example`), and are compiled into the debug build only; without a key the screen says how to add one:
+The example holds no secret key and creates no orders: your server creates the order with its secret key (`POST /api/v3/orders`) and returns `orderId` and `clientSecret`. Payriff accepts the publishable key only from the package names you registered for it, so ask Payriff to allow `com.payriff.example.android`. The publishable key, the environment and the region come from `local.properties` in the repository root, which is git-ignored (start from `local.properties.example`), and are compiled into the debug build only; without a key the screen says how to add one:
 
 ```properties
 payriff.publishableKey=
+# SANDBOX or PRODUCTION
 payriff.environment=SANDBOX
+# AZ or SA. SA has no sandbox: with SA, SANDBOX payments go to production and charge real cards.
+payriff.region=AZ
 ```
 
 SDK logging is on, so the SDK's lines appear in Logcat (tag `Payriff`). The example keeps the SDK's security defaults: its connections to Payriff are pinned, so a proxy such as Charles or Burp makes them fail, and on a rooted device, or with Frida or Xposed loaded, the payment view says that card payments aren't available on this device. To pay from such a test device anyway, add `allowCompromisedDevices = true` to `ExampleSettings.config` for that run of the debug build; a release build ignores it.
@@ -539,8 +569,8 @@ SDK logging is on, so the SDK's lines appear in Logcat (tag `Payriff`). The exam
 |---|---|
 | `Failed(NOT_CONFIGURED)` | Call `Payriff.configure` in `Application.onCreate`. |
 | `Failed(INVALID_CONFIG)` | Set `publishableKey` to your publishable key (`pr_pk_live_…`), never the secret key. |
-| `Failed(UNAUTHORIZED)` | The publishable key does not belong to the selected environment, was revoked, or your package name is not allowed for it. |
-| `Failed(SESSION_EXPIRED)` | The order does not exist in this environment, or its `clientSecret` is wrong or expired. Create a new order. |
+| `Failed(UNAUTHORIZED)` | The publishable key does not belong to the selected region and environment, was revoked, or your package name is not allowed for it. |
+| `Failed(SESSION_EXPIRED)` | The order does not exist in this region and environment, or its `clientSecret` is wrong or expired. Create a new order. |
 | `Failed(ORDER_NOT_PAYABLE)` | The order was already paid, cancelled or expired, or card payments are not enabled for it. |
 | `Failed(VALIDATION_FAILED)` | The form shows what to fix under each field; `error.fields` lists the same. |
 | `Failed(PRESENTATION_FAILED)` | The payment view is not shown in a `ComponentActivity` (for example an `AppCompatActivity`) or in one of its fragments or dialogs, or Android System WebView is missing or disabled. |

@@ -12,6 +12,7 @@ import com.payriff.android.internal.UrlConnectionTransport
 import com.payriff.android.internal.card.CardApiClient
 import com.payriff.android.internal.card.CardKeys
 import com.payriff.android.internal.card.CardSetup
+import com.payriff.android.internal.card.ClientApiHosts
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -70,7 +71,8 @@ public object Payriff {
      *
      * Never throws. A [PayriffConfig.publishableKey] that is not a publishable key (`pr_pk_live_…`), for example a
      * secret key pasted by mistake, is logged as a warning (`Invalid configuration: …`), and every card call then fails
-     * with [PayriffErrorCode.INVALID_CONFIG].
+     * with [PayriffErrorCode.INVALID_CONFIG]. [PayriffRegion.SA] with [PayriffEnvironment.SANDBOX] is logged as a
+     * warning too: there is no Saudi sandbox, so its card payments go to production and charge real cards.
      */
     @JvmStatic
     public fun configure(config: PayriffConfig) {
@@ -80,6 +82,7 @@ public object Payriff {
         if (key != null && !CardKeys.isValidPublishableKey(key)) {
             PayriffLog.warning { "Invalid configuration: PayriffConfig.publishableKey must be a publishable key (pr_pk_live_…)." }
         }
+        ClientApiHosts.warning(config.region, config.environment)?.let { warning -> PayriffLog.warning { warning } }
     }
 
     /**

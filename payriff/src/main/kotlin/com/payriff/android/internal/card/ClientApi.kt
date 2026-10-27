@@ -7,6 +7,7 @@ import com.payriff.android.PayriffError
 import com.payriff.android.PayriffErrorCode
 import com.payriff.android.PayriffLanguage
 import com.payriff.android.PayriffPaymentStatus
+import com.payriff.android.PayriffRegion
 import com.payriff.android.internal.ApiParsing
 import com.payriff.android.internal.CertificatePinning
 import com.payriff.android.internal.CertificatePinningException
@@ -26,17 +27,35 @@ import java.io.IOException
 import java.math.BigDecimal
 import java.util.Locale
 
-/** The Client API host of each environment (CONTRACT §16.2). The card flow ignores [PayriffConfig.baseUrl]. */
+/**
+ * The Client API host of each region and environment (CONTRACT §16.2, `card_api.json` → `hosts`). The one place that
+ * resolves them: [PayriffConfig.apiBaseUrl] returns [of], and every card call, the 3-D Secure callback check, pinning
+ * and log redaction use that host. The card flow ignores `PayriffConfig.baseUrl`.
+ */
 internal object ClientApiHosts {
-    const val PRODUCTION = "https://api.payriff.com"
+    const val AZ_PRODUCTION = "https://api.payriff.com"
 
     /** **Provisional**: the backend has not confirmed the sandbox host yet (CONTRACT §16.13). Keep it this one constant. */
-    const val SANDBOX = "https://sb-api.payriff.com"
+    const val AZ_SANDBOX = "https://sb-api.payriff.com"
 
-    fun of(environment: PayriffEnvironment): String = when (environment) {
-        PayriffEnvironment.PRODUCTION -> PRODUCTION
-        PayriffEnvironment.SANDBOX -> SANDBOX
+    /** Saudi Arabia (GCC Pay). There is no Saudi sandbox (owner decision 2026-10-27): the sandbox goes here too. */
+    const val SA_PRODUCTION = "https://api.gccpay.sa"
+
+    fun of(region: PayriffRegion, environment: PayriffEnvironment): String = when (region) {
+        PayriffRegion.AZ -> when (environment) {
+            PayriffEnvironment.PRODUCTION -> AZ_PRODUCTION
+            PayriffEnvironment.SANDBOX -> AZ_SANDBOX
+        }
+        PayriffRegion.SA -> SA_PRODUCTION
     }
+
+    /** The one warning [com.payriff.android.Payriff.configure] logs for [region] and [environment], or `null`. */
+    fun warning(region: PayriffRegion, environment: PayriffEnvironment): String? =
+        if (region == PayriffRegion.SA && environment == PayriffEnvironment.SANDBOX) {
+            "Region sa has no sandbox: card payments go to production ($SA_PRODUCTION) and charge real cards."
+        } else {
+            null
+        }
 }
 
 /** What every Client API request carries. Never logged: [toString] leaves the key and the secret out. */
@@ -82,7 +101,7 @@ internal object CardSetup {
             PayriffErrorCode.INVALID_ORDER,
             "clientSecret must be the order's pr_cs_… value from your backend.",
         )
-        return CardCredentials(ClientApiHosts.of(config.environment), checkNotNull(key), secret, CardKeys.appId(packageName))
+        return CardCredentials(config.apiBaseUrl, checkNotNull(key), secret, CardKeys.appId(packageName))
     }
 
     /** The trimmed order id. Throws [PayriffErrorCode.INVALID_ORDER] when it is blank. */

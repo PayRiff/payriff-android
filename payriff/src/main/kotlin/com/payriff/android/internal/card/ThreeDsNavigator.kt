@@ -21,10 +21,11 @@ internal enum class ThreeDsNav {
 }
 
 /**
- * The 3DS navigation policy of one WebView. A gateway callback is an https main-frame URL on the API host of the
- * configured environment (case-insensitive, same port) whose path starts with `/api/v3/gateway/` and has a `callback`
- * segment. After a callback, the next main-frame navigation that is neither another callback nor `about:blank` ends
- * the flow. Before it, https is allowed, app schemes go to the OS, and every other main-frame scheme is blocked.
+ * The 3DS navigation policy of one WebView. A gateway callback is an https main-frame URL on the host of
+ * [com.payriff.android.PayriffConfig.apiBaseUrl], which follows the configured region and environment
+ * (case-insensitive, same port), whose path starts with `/api/v3/gateway/` and has a `callback` segment. After a
+ * callback, the next main-frame navigation that is neither another callback nor `about:blank` ends the flow. Before
+ * it, https is allowed, app schemes go to the OS, and every other main-frame scheme is blocked.
  *
  * Thread-safe: [markCallback] may run on the WebView's network thread (`shouldInterceptRequest`), where a POST to the
  * callback is visible even though `shouldOverrideUrlLoading` never sees it.

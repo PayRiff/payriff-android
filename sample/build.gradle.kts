@@ -9,6 +9,7 @@ plugins {
 // The example's settings come from the git-ignored local.properties in the repository root:
 //   payriff.publishableKey=pr_pk_live_...  (the card flow's publishable key)
 //   payriff.environment=SANDBOX            (SANDBOX or PRODUCTION)
+//   payriff.region=AZ                      (AZ or SA; SA has no sandbox: SANDBOX payments go to production)
 // They are compiled into the DEBUG BuildConfig only; release builds have no publishable key.
 // The example holds no secret key: your server creates the order with its secret key (POST /api/v3/orders).
 val localProperties = Properties().apply {
@@ -50,10 +51,12 @@ android {
     buildTypes {
         debug {
             buildConfigField("String", "PAYRIFF_ENVIRONMENT", javaString(localValue("payriff.environment").ifEmpty { "SANDBOX" }))
+            buildConfigField("String", "PAYRIFF_REGION", javaString(localValue("payriff.region").ifEmpty { "AZ" }))
             buildConfigField("String", "PAYRIFF_PUBLISHABLE_KEY", javaString(localValue("payriff.publishableKey")))
         }
         release {
             buildConfigField("String", "PAYRIFF_ENVIRONMENT", "\"SANDBOX\"")
+            buildConfigField("String", "PAYRIFF_REGION", "\"AZ\"")
             buildConfigField("String", "PAYRIFF_PUBLISHABLE_KEY", "\"\"")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))

@@ -30,5 +30,6 @@ For bugs that are not security problems, use the [issue tracker](https://github.
 - Steps to reproduce, ideally with a small app or a unit test.
 - Logs, screenshots or a proof of concept that show the problem.
 
-Use the sandbox environment, sandbox orders and test cards. Never send real card numbers, live keys, client secrets or
-customer data, and remove them from logs and screenshots before you attach them.
+Use the sandbox environment of region `AZ`, sandbox orders and test cards. Region `SA` has no sandbox: its `SANDBOX`
+payments go to production and charge real cards. Never send real card numbers, live keys, client secrets or customer
+data, and remove them from logs and screenshots before you attach them.

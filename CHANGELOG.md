@@ -1,3 +1,33 @@
+## [1.0.0-rc.2] - 2026-10-27
+
+Second release candidate of 1.0.0 (CONTRACT revision 6). The API can still change before 1.0.0.
+
+### Added
+
+- `PayriffRegion` and `PayriffConfig.region` (CONTRACT §16.2): `AZ` (the default, `api.payriff.com`) or `SA` (Saudi
+  Arabia, GCC Pay, `https://api.gccpay.sa`), with a Java builder setter. `PayriffConfig.toString()` includes the region.
+  There is no Saudi sandbox: with `SA`, `SANDBOX` card payments go to production (`https://api.gccpay.sa`) and charge
+  real cards, and `Payriff.configure` logs a warning for that combination when logging is on.
+- `PayriffConfig.apiBaseUrl`: the API host of the configuration's region and environment. Every card call, the 3-D
+  Secure callback check, certificate pinning and log redaction use it.
+- Example app (`sample`): `payriff.region` (`AZ` or `SA`) in `local.properties`, next to `payriff.environment`.
+
+### Removed
+
+- `PayriffEnvironment.apiBaseUrl`: the host now depends on the region too. Use `PayriffConfig.apiBaseUrl`.
+
+### Changed
+
+- `PayriffConfig`'s constructor takes `region` right after `environment`. Kotlin callers that pass `language` and the
+  later parameters by position must name them.
+
+### Security
+
+- Certificate pinning (CONTRACT §16.15) covers `api.gccpay.sa` like `api.payriff.com`; GTS Root R1 (the current root of
+  `*.gccpay.sa`) is pinned and GTS Root R4 is added as a backup pin for Google's ECDSA chains.
+- Logs keep the path of `api.gccpay.sa` URLs, shortened like `api.payriff.com`'s (CONTRACT §11); every other host still
+  logs as `scheme://host[:port]`.
+
 ## [1.0.0-rc.1] - 2026-10-24
 
 Release candidate of 1.0.0 for the security review. The API can still change before 1.0.0.

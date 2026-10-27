@@ -40,8 +40,8 @@ internal object Urls {
     /** What [redact] returns for a URL that [parse] refuses: no valid scheme, an invalid port or IPv6 host. */
     private const val UNPARSEABLE = "<unparseable url>"
 
-    /** Payriff's API hosts (CONTRACT §2): the only hosts whose URL paths are logged (§11). */
-    private val LOGGED_PATH_HOSTS = setOf("api.payriff.com", "sb-api.payriff.com")
+    /** Payriff's API hosts of every region (CONTRACT §16.2): the only hosts whose URL paths are logged (§11). */
+    private val LOGGED_PATH_HOSTS = setOf("api.payriff.com", "sb-api.payriff.com", "api.gccpay.sa")
 
     /** A logged path segment of this many characters or more is cut to its first and last [SEGMENT_END_LENGTH]. */
     private const val LONG_SEGMENT_LENGTH = 16
@@ -105,9 +105,9 @@ internal object Urls {
      * HTTP details and inside logged bodies.
      *
      * - An http(s) URL never shows its user info (`user:password@`), query or fragment. Its path is kept only on
-     *   Payriff's API hosts (`api.payriff.com`, `sb-api.payriff.com`), with every segment of 16 or more characters
-     *   shortened to its first 4 and last 4 (`/api/v3/client/orders/7c9e…0ae7/pay`). Any other host, such as a bank's
-     *   3-D Secure page, shows as `scheme://host[:port]` only.
+     *   Payriff's API hosts (`api.payriff.com`, `sb-api.payriff.com`, `api.gccpay.sa`), with every segment of 16 or
+     *   more characters shortened to its first 4 and last 4 (`/api/v3/client/orders/7c9e…0ae7/pay`). Any other host,
+     *   such as a bank's 3-D Secure page, shows as `scheme://host[:port]` only.
      * - Any other scheme shows only as `<scheme>:…`, so `tel:` numbers, `mailto:` addresses and `data:` or
      *   `javascript:` content never reach the logs.
      *

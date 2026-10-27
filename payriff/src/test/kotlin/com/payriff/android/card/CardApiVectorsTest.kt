@@ -4,6 +4,7 @@ import com.payriff.android.PayriffConfig
 import com.payriff.android.PayriffEnvironment
 import com.payriff.android.PayriffError
 import com.payriff.android.PayriffErrorCode
+import com.payriff.android.PayriffRegion
 import com.payriff.android.PayriffResult
 import com.payriff.android.internal.UrlConnectionTransport
 import com.payriff.android.internal.card.CardApiClient
@@ -243,13 +244,28 @@ class CardApiVectorsTest {
         assertEquals(PayriffErrorCode.INVALID_ORDER, error?.code)
     }
 
+    /** `hosts`: the API base URL and the configure warning of every region and environment (CONTRACT §16.2). */
     @Test
-    fun hostTable() {
-        assertEquals("https://api.payriff.com", ClientApiHosts.of(PayriffEnvironment.PRODUCTION))
-        assertEquals("https://sb-api.payriff.com", ClientApiHosts.of(PayriffEnvironment.SANDBOX))
-        val config = PayriffConfig(environment = PayriffEnvironment.SANDBOX, publishableKey = PUBLISHABLE_KEY)
-        assertEquals(ClientApiHosts.SANDBOX, CardSetup.credentials(config, CLIENT_SECRET, APP_ID).host)
-        for (environment in PayriffEnvironment.entries) assertEquals(environment.apiBaseUrl, ClientApiHosts.of(environment))
+    fun hosts() {
+        val hosts = vectors.getJSONObject("hosts")
+        assertEquals(hosts.getString("defaultRegion"), PayriffConfig().region.name.lowercase(Locale.ROOT))
+        val cases = hosts.getJSONArray("cases").objects()
+        val combinations = cases.map { case ->
+            val region = PayriffRegion.valueOf(case.getString("region").uppercase(Locale.ROOT))
+            val environment = PayriffEnvironment.valueOf(case.getString("environment").uppercase(Locale.ROOT))
+            val name = "$region $environment"
+            val config = PayriffConfig(publishableKey = PUBLISHABLE_KEY, environment = environment, region = region)
+            assertEquals(name, case.getString("apiBaseUrl"), config.apiBaseUrl)
+            assertEquals(name, case.getString("apiBaseUrl"), ClientApiHosts.of(region, environment))
+            assertEquals(name, case.getString("apiBaseUrl"), CardSetup.credentials(config, CLIENT_SECRET, APP_ID).host)
+            assertEquals(name, case.stringOrNull("warning"), ClientApiHosts.warning(region, environment))
+            region to environment
+        }
+        assertEquals(
+            "every region and environment has a case",
+            PayriffRegion.entries.flatMap { region -> PayriffEnvironment.entries.map { region to it } }.toSet(),
+            combinations.toSet(),
+        )
         assertEquals("/api/v3/client/orders/a%2Fb", CardApiClient.orderPath(" a/b "))
         assertEquals("/api/v3/client/orders/%2E%2E", CardApiClient.orderPath(".."))
     }

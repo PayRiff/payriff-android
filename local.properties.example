@@ -7,5 +7,8 @@ sdk.dir=
 payriff.publishableKey=
 # SANDBOX or PRODUCTION
 payriff.environment=SANDBOX
+# AZ (api.payriff.com) or SA (Saudi Arabia, GCC Pay, api.gccpay.sa). SA has no sandbox:
+# with SA, SANDBOX payments go to production and charge real cards.
+payriff.region=AZ
 # There is no secret key here: your server creates the order with its secret key (POST /api/v3/orders)
 # and returns orderId and clientSecret.

@@ -48,6 +48,7 @@ class VectorCoverageTest {
                 "requests" to "CardApiVectorsTest.requests / headersOverARealConnection",
                 "keys" to "CardApiVectorsTest.keys",
                 "clientSecrets" to "CardApiVectorsTest.clientSecrets",
+                "hosts" to "CardApiVectorsTest.hosts / PayriffApiTest.configureLogsTheWarningOfEachHostCase",
             ),
             "card_crypto.json" to mapOf(
                 "description" to "-",
@@ -76,6 +77,7 @@ class VectorCoverageTest {
                 "pins" to "CertificatePinningTest.theHostsAndPinsEqualTheVector",
                 "trustAnchors" to "CertificatePinningTest.everyTrustAnchorIsAPinnedKey",
                 "currentChain" to "CertificatePinningTest.theCurrentChainPassesAndTheInterceptedChainIsRefused",
+                "gccpayChain" to "CertificatePinningTest.theGccpayChainPasses",
                 "interceptedChain" to "CertificatePinningTest.theCurrentChainPassesAndTheInterceptedChainIsRefused",
             ),
             "card_validation.json" to mapOf(

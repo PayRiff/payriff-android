@@ -1,5 +1,5 @@
 # Local configuration. local.properties holds sdk.dir and the sample's Payriff settings
-# (payriff.publishableKey, payriff.environment). It must never be committed.
+# (payriff.publishableKey, payriff.environment, payriff.region). It must never be committed.
 local.properties
 *.local.properties
 secrets.properties

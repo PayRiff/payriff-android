@@ -11,6 +11,9 @@ import com.payriff.android.internal.PaymentGuard
 import com.payriff.android.internal.screenProtectionOn
 import com.payriff.android.testing.HostAppRule
 import com.payriff.android.testing.LogCapture
+import com.payriff.android.testing.Vectors
+import com.payriff.android.testing.Vectors.objects
+import com.payriff.android.testing.Vectors.stringOrNull
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
@@ -29,6 +32,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import java.math.BigDecimal
+import java.util.Locale
 import java.util.concurrent.CopyOnWriteArrayList
 
 /** The public entry points, the configuration, the one-payment guard and logging privacy. */
@@ -93,6 +97,48 @@ class PayriffApiTest {
         assertFalse("never a secret key", request.headers.containsKey("Authorization"))
     }
 
+    /** CONTRACT §16.2: region sa sends every card call to api.gccpay.sa, in production and in the "sandbox". */
+    @Test
+    fun retrieveOrderUsesTheRegionHost() = runBlocking {
+        for (environment in PayriffEnvironment.entries) {
+            sent.clear()
+            Payriff.configure(PayriffConfig(publishableKey = PUBLISHABLE_KEY, environment = environment, region = PayriffRegion.SA))
+            Payriff.retrieveOrder("o1", CLIENT_SECRET)
+            assertEquals("$environment", "https://api.gccpay.sa/api/v3/client/orders/o1", sent.single().url)
+            assertEquals(PUBLISHABLE_KEY, sent.single().headers["X-Public-Key"])
+        }
+    }
+
+    /**
+     * `card_api.json` → `hosts`: every configure call logs the case's warning once (region sa has no sandbox), and only
+     * with logging on.
+     */
+    @Test
+    fun configureLogsTheWarningOfEachHostCase() {
+        val entries = mutableListOf<PayriffLogEntry>()
+        PayriffLogger.listener = PayriffLogListener { entries += it }
+        val cases = Vectors.load("card_api.json").getJSONObject("hosts").getJSONArray("cases").objects()
+        assertEquals(4, cases.size)
+        for (case in cases) {
+            val config = PayriffConfig(
+                publishableKey = PUBLISHABLE_KEY,
+                environment = PayriffEnvironment.valueOf(case.getString("environment").uppercase(Locale.ROOT)),
+                region = PayriffRegion.valueOf(case.getString("region").uppercase(Locale.ROOT)),
+                enableLogging = true,
+            )
+            val expected = listOfNotNull(case.stringOrNull("warning"))
+            for (call in 1..2) {
+                entries.clear()
+                Payriff.configure(config)
+                val warnings = entries.filter { it.level == PayriffLogLevel.WARNING }.map { it.message }
+                assertEquals("$config, configure call $call", expected, warnings)
+            }
+        }
+        entries.clear()
+        Payriff.configure(PayriffConfig(publishableKey = PUBLISHABLE_KEY, environment = PayriffEnvironment.SANDBOX, region = PayriffRegion.SA))
+        assertTrue("no log entry without enableLogging", entries.isEmpty())
+    }
+
     @Test
     fun invalidInputFailsBeforeAnyRequest() {
         Payriff.configure(PayriffConfig(publishableKey = PUBLISHABLE_KEY))
@@ -128,6 +174,7 @@ class PayriffApiTest {
         val built = PayriffConfig.Builder()
             .publishableKey(" $PUBLISHABLE_KEY ")
             .environment(PayriffEnvironment.SANDBOX)
+            .region(PayriffRegion.SA)
             .language(PayriffLanguage.RU)
             .enableLogging(true)
             .allowScreenCaptureInDebug(true)
@@ -136,6 +183,7 @@ class PayriffApiTest {
         val named = PayriffConfig(
             publishableKey = PUBLISHABLE_KEY,
             environment = PayriffEnvironment.SANDBOX,
+            region = PayriffRegion.SA,
             language = PayriffLanguage.RU,
             enableLogging = true,
             allowScreenCaptureInDebug = true,
@@ -145,13 +193,15 @@ class PayriffApiTest {
         assertEquals(named.toString(), named.newBuilder().build().toString())
         assertEquals(PayriffConfig().toString(), PayriffConfig.Builder().build().toString())
         assertEquals(
-            "PayriffConfig(publishableKey=pr_pk_live_***(${PUBLISHABLE_KEY.length}), environment=SANDBOX, language=RU, " +
-                "enableLogging=true, allowScreenCaptureInDebug=true, allowCompromisedDevices=true)",
+            "PayriffConfig(publishableKey=pr_pk_live_***(${PUBLISHABLE_KEY.length}), environment=SANDBOX, region=SA, " +
+                "language=RU, enableLogging=true, allowScreenCaptureInDebug=true, allowCompromisedDevices=true)",
             named.toString(),
         )
         val defaults = PayriffConfig()
         assertNull(defaults.publishableKey)
         assertEquals(PayriffEnvironment.PRODUCTION, defaults.environment)
+        assertEquals(PayriffRegion.AZ, defaults.region)
+        assertEquals("https://api.payriff.com", defaults.apiBaseUrl)
         assertNull(defaults.language)
         assertFalse(defaults.enableLogging)
         assertFalse("the card form and the sheet are protected by default", defaults.allowScreenCaptureInDebug)
@@ -260,7 +310,7 @@ class PayriffApiTest {
     /** The helper names shared by every Payriff SDK. */
     @Test
     fun helperNamesMatchTheContract() {
-        assertEquals("1.0.0-rc.1", Payriff.version)
+        assertEquals("1.0.0-rc.2", Payriff.version)
         assertEquals(Payriff.VERSION, Payriff.version)
 
         assertFalse(Payriff.isPaymentInProgress)
@@ -269,8 +319,10 @@ class PayriffApiTest {
         PaymentGuard.release("flow-1")
         assertFalse(Payriff.isPaymentInProgress)
 
-        assertEquals("https://api.payriff.com", PayriffEnvironment.PRODUCTION.apiBaseUrl)
-        assertEquals("https://sb-api.payriff.com", PayriffEnvironment.SANDBOX.apiBaseUrl)
+        assertEquals("https://api.payriff.com", PayriffConfig().apiBaseUrl)
+        assertEquals("https://sb-api.payriff.com", PayriffConfig(environment = PayriffEnvironment.SANDBOX).apiBaseUrl)
+        assertEquals("https://api.gccpay.sa", PayriffConfig(region = PayriffRegion.SA).apiBaseUrl)
+        assertEquals("https://api.gccpay.sa", PayriffConfig(environment = PayriffEnvironment.SANDBOX, region = PayriffRegion.SA).apiBaseUrl)
         assertEquals(PayriffPaymentStatus.APPROVED, PayriffPaymentStatus.fromRaw(" paid "))
 
         val payment = PayriffPayment("o", PayriffPaymentStatus.APPROVED)

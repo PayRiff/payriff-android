@@ -1,5 +1,7 @@
 package com.payriff.android
 
+import com.payriff.android.internal.card.ClientApiHosts
+
 /**
  * SDK configuration, passed to [Payriff.configure].
  *
@@ -9,6 +11,7 @@ package com.payriff.android
  *     PayriffConfig(
  *         publishableKey = "pr_pk_live_…",
  *         environment = PayriffEnvironment.SANDBOX,
+ *         region = PayriffRegion.AZ,
  *     ),
  * )
  * ```
@@ -18,8 +21,11 @@ package com.payriff.android
  * the app: your server creates orders with it and gives the app each order's `orderId` and `clientSecret`.
  *
  * @param publishableKey Your publishable key. See [PayriffConfig.publishableKey].
- * @property environment [PayriffEnvironment.PRODUCTION] (default) or [PayriffEnvironment.SANDBOX]. Selects the API host
- *   of every card call.
+ * @property environment [PayriffEnvironment.PRODUCTION] (default) or [PayriffEnvironment.SANDBOX]. With [region] it
+ *   selects the API host of every card call, [apiBaseUrl].
+ * @property region [PayriffRegion.AZ] (default, `api.payriff.com`) or [PayriffRegion.SA] (Saudi Arabia, GCC Pay,
+ *   `api.gccpay.sa`). With [environment] it selects the API host of every card call, [apiBaseUrl]. [PayriffRegion.SA]
+ *   has no sandbox: with [PayriffEnvironment.SANDBOX] its card payments go to production and charge real cards.
  * @property language Language of the card form and the 3-D Secure sheet. `null` uses the device language.
  * @property enableLogging Send SDK logs to Logcat and [PayriffLogger.listener]. Defaults to `false`.
  * @property allowScreenCaptureInDebug Debug builds only: lets screenshots and screen recordings capture the card form
@@ -35,6 +41,7 @@ package com.payriff.android
 public class PayriffConfig(
     publishableKey: String? = null,
     public val environment: PayriffEnvironment = PayriffEnvironment.PRODUCTION,
+    public val region: PayriffRegion = PayriffRegion.AZ,
     public val language: PayriffLanguage? = null,
     public val enableLogging: Boolean = false,
     public val allowScreenCaptureInDebug: Boolean = false,
@@ -47,10 +54,24 @@ public class PayriffConfig(
      */
     public val publishableKey: String? = publishableKey?.trim()?.takeIf { it.isNotEmpty() }
 
+    /**
+     * API base URL of [region] and [environment], the host of every card call (CONTRACT §16.2):
+     *
+     * | [region] | [environment] | API base URL |
+     * |---|---|---|
+     * | [PayriffRegion.AZ] | [PayriffEnvironment.PRODUCTION] | `https://api.payriff.com` |
+     * | [PayriffRegion.AZ] | [PayriffEnvironment.SANDBOX] | `https://sb-api.payriff.com` (provisional) |
+     * | [PayriffRegion.SA] | [PayriffEnvironment.PRODUCTION] | `https://api.gccpay.sa` |
+     * | [PayriffRegion.SA] | [PayriffEnvironment.SANDBOX] | `https://api.gccpay.sa`: there is no Saudi sandbox |
+     */
+    public val apiBaseUrl: String
+        get() = ClientApiHosts.of(region, environment)
+
     /** Returns a [Builder] pre-filled with this configuration. */
     public fun newBuilder(): Builder = Builder()
         .publishableKey(publishableKey)
         .environment(environment)
+        .region(region)
         .language(language)
         .enableLogging(enableLogging)
         .allowScreenCaptureInDebug(allowScreenCaptureInDebug)
@@ -59,13 +80,14 @@ public class PayriffConfig(
     /** Describes the configuration with the publishable key redacted as `pr_pk_live_***(<length>)`, so it is safe to log. */
     override fun toString(): String =
         "PayriffConfig(publishableKey=${publishableKey?.let(::redactPublishableKey)}, environment=$environment, " +
-            "language=$language, enableLogging=$enableLogging, allowScreenCaptureInDebug=$allowScreenCaptureInDebug, " +
+            "region=$region, language=$language, enableLogging=$enableLogging, allowScreenCaptureInDebug=$allowScreenCaptureInDebug, " +
             "allowCompromisedDevices=$allowCompromisedDevices)"
 
     /** Java-friendly builder for [PayriffConfig]. Every setter mirrors the constructor parameter of the same name. */
     public class Builder {
         private var publishableKey: String? = null
         private var environment: PayriffEnvironment = PayriffEnvironment.PRODUCTION
+        private var region: PayriffRegion = PayriffRegion.AZ
         private var language: PayriffLanguage? = null
         private var enableLogging: Boolean = false
         private var allowScreenCaptureInDebug: Boolean = false
@@ -76,6 +98,9 @@ public class PayriffConfig(
 
         /** Sets [PayriffConfig.environment]. */
         public fun environment(value: PayriffEnvironment): Builder = apply { environment = value }
+
+        /** Sets [PayriffConfig.region]. */
+        public fun region(value: PayriffRegion): Builder = apply { region = value }
 
         /** Sets [PayriffConfig.language]. */
         public fun language(value: PayriffLanguage?): Builder = apply { language = value }
@@ -93,6 +118,7 @@ public class PayriffConfig(
         public fun build(): PayriffConfig = PayriffConfig(
             publishableKey = publishableKey,
             environment = environment,
+            region = region,
             language = language,
             enableLogging = enableLogging,
             allowScreenCaptureInDebug = allowScreenCaptureInDebug,

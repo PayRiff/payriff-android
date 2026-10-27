@@ -1,5 +1,7 @@
 package com.payriff.android.card
 
+import com.payriff.android.PayriffConfig
+import com.payriff.android.PayriffRegion
 import com.payriff.android.internal.card.NextAction
 import com.payriff.android.internal.card.ThreeDsNav
 import com.payriff.android.internal.card.ThreeDsNavigator
@@ -69,7 +71,7 @@ class CardNavigationVectorsTest {
     @Test
     fun everyThreeDsNavigationStep() {
         val cases = Vectors.cases("card_3ds_navigation.json")
-        assertEquals(14, cases.size)
+        assertEquals(16, cases.size)
         for (case in cases) {
             val navigator = ThreeDsNavigator(case.getString("apiBase"))
             for (step in case.getJSONArray("steps").objects()) {
@@ -99,6 +101,11 @@ class CardNavigationVectorsTest {
         assertEquals(false, sandbox.isCallback("https://sb-api.payriff.com:8443/api/v3/gateway/atb/callback"))
         assertEquals(false, sandbox.isCallback("https://user@evil.example/api/v3/gateway/atb/callback"))
         assertEquals(true, sandbox.isCallback("https://evil.example@sb-api.payriff.com/api/v3/gateway/atb/callback"))
+        val gccpay = ThreeDsNavigator(PayriffConfig(region = PayriffRegion.SA).apiBaseUrl)
+        assertEquals(true, gccpay.isCallback("https://API.GCCPAY.SA/api/v3/gateway/atb/callback"))
+        assertEquals(false, gccpay.isCallback("https://api.payriff.com/api/v3/gateway/atb/callback"))
+        assertEquals(false, gccpay.isCallback("https://api.gccpay.sa.evil.example/api/v3/gateway/atb/callback"))
+        assertEquals(false, gccpay.isCallback("https://evil-api.gccpay.sa/api/v3/gateway/atb/callback"))
     }
 
     private fun Any?.asString(): String? = if (this == null || this == JSONObject.NULL) null else this as String

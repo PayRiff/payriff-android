@@ -20,27 +20,29 @@ import javax.net.ssl.X509TrustManager
 
 /**
  * TLS certificate pinning for the SDK's own HTTP client (CONTRACT §16.15, `vectors/tls_pins.json`). Every Client API
- * call (order, pay, three-ds, status) to `api.payriff.com` or `sb-api.payriff.com` is accepted only when the
- * platform's normal TLS validation (chain, expiry, host name) succeeds **and** at least one certificate of the
+ * call (order, pay, three-ds, status) to `api.payriff.com`, `sb-api.payriff.com` or `api.gccpay.sa` is accepted only
+ * when the platform's normal TLS validation (chain, expiry, host name) succeeds **and** at least one certificate of the
  * validated chain has its SubjectPublicKeyInfo SHA-256 (base64) in [PINS].
  *
- * The pins are CA keys, not the leaf (the current Sectigo intermediate and roots plus backup roots of major CAs), so a
- * yearly leaf renewal never breaks apps. There is no switch to turn pinning off. The 3-D Secure WebViews load the
- * banks' pages and are not pinned. Test-only transport hooks ([com.payriff.android.Payriff.transportForTests]) replace
- * the whole transport, so they are unaffected.
+ * The pins are CA keys, not the leaf (the current Sectigo intermediate and roots of `*.payriff.com`, Google Trust
+ * Services' GTS Root R1 and R4 for `*.gccpay.sa`, plus backup roots of major CAs), so a leaf renewal never breaks
+ * apps. There is no switch to turn pinning off. The 3-D Secure WebViews load the banks' pages and are not pinned.
+ * Test-only transport hooks ([com.payriff.android.Payriff.transportForTests]) replace the whole transport, so they are
+ * unaffected.
  *
  * This object is pure: it holds the pins and the SHA-256 check over parsed certificates, so the JVM unit tests exercise
  * it without a TLS connection. The Android glue ([CertificatePinner]) lives in a separate class.
  */
 internal object CertificatePinning {
 
-    /** The hosts whose connections are pinned (CONTRACT §16.2 host table). Compared lower-case. */
-    val PINNED_HOSTS: Set<String> = setOf("api.payriff.com", "sb-api.payriff.com")
+    /** The hosts whose connections are pinned (CONTRACT §16.2 host table, every region). Compared lower-case. */
+    val PINNED_HOSTS: Set<String> = setOf("api.payriff.com", "sb-api.payriff.com", "api.gccpay.sa")
 
     /**
      * The pinned SubjectPublicKeyInfo SHA-256 digests, base64. Equal to `tls_pins.json` → `pins[].spkiSha256`: the
-     * current Sectigo intermediate (DV R36) and roots (R46, USERTrust RSA), and backup roots of major CAs. A test
-     * asserts this set equals the vector.
+     * current Sectigo intermediate (DV R36) and roots (R46, USERTrust RSA) of `*.payriff.com`, GTS Root R1 (the current
+     * root of `*.gccpay.sa`) and GTS Root R4 (Google's ECDSA chains), and backup roots of major CAs. A test asserts this
+     * set equals the vector.
      */
     val PINS: Set<String> = setOf(
         "a9khLOZJxlnJyrxstg/P+seiDCm+Yf3OsrXyFocBaI0=", // Sectigo Public Server Authentication CA DV R36 (intermediate)
@@ -54,9 +56,10 @@ internal object CertificatePinning {
         "NqvDJlas/GRcYbcWE8S/IceH9cq77kg0jVhZeAPXq8k=", // Amazon Root CA 3
         "i7WTqTvh0OioIruIfFR4kMPnBqrS2rdiVPl/s2uC/CY=", // DigiCert Global Root G2
         "r/mIkG3eEpVdm+u/ko/cwxzOMo1bk4TyHIlByibiA5E=", // DigiCert Global Root CA
-        "hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Gc=", // GTS Root R1
+        "hxqRlPTu1bMS/0DITB1SSu0vd4u/8l8TjPgfaAp63Gc=", // GTS Root R1 (current root of api.gccpay.sa)
         "cGuxAXyFXFkWm61cF4HPWX8S0srS9j0aSqN0k4AP+4A=", // GlobalSign Root CA - R3
         "rn+WLLnmp9v3uDP7GPqbcaiRdd+UnCMrap73yz3yu/w=", // GlobalSign Root R46
+        "mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=", // GTS Root R4 (Google, ECDSA chains)
     )
 
     /** The message of the [com.payriff.android.PayriffError] a pinning failure becomes (CONTRACT §16.15). */

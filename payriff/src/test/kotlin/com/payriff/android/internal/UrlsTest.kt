@@ -1,5 +1,8 @@
 package com.payriff.android.internal
 
+import com.payriff.android.PayriffConfig
+import com.payriff.android.PayriffEnvironment
+import com.payriff.android.PayriffRegion
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -64,6 +67,19 @@ class UrlsTest {
         assertEquals("https://sb-api.payriff.com/api/v3/client/orders/o1/status", Urls.redact("https://sb-api.payriff.com/api/v3/client/orders/o1/status"))
         assertEquals("https://api.payriff.com", Urls.redact("https://api.payriff.com"))
         assertEquals("https://api.payriff.com/", Urls.redact("https://api.payriff.com/?x=1"))
+        // Region sa's host (CONTRACT §16.2) keeps its path like api.payriff.com.
+        assertEquals(
+            "https://api.gccpay.sa/api/v3/client/orders/7c9e…0ae7/pay",
+            Urls.redact("https://user:pw@api.gccpay.sa/api/v3/client/orders/7c9e6679-7425-40de-944b-e07fc1f90ae7/pay?x=1#y"),
+        )
+        assertEquals("https://api.gccpay.sa/api/v3/client/orders/o1/status", Urls.redact("HTTPS://API.GCCPAY.SA/api/v3/client/orders/o1/status"))
+        // The host of every region and environment (PayriffConfig.apiBaseUrl) keeps its path.
+        for (region in PayriffRegion.entries) {
+            for (environment in PayriffEnvironment.entries) {
+                val base = PayriffConfig(environment = environment, region = region).apiBaseUrl
+                assertEquals("$region $environment", "$base/api/v3/client/orders/o1", Urls.redact("$base/api/v3/client/orders/o1?x=1"))
+            }
+        }
         // Bank, 3-D Secure and merchant pages: the path, the query and the fragment are all dropped.
         assertEquals("https://merchant.example", Urls.redact("https://merchant.example/cb?orderId=1&token=secret#x"))
         assertEquals("https://acs.bank.example", Urls.redact("https://acs.bank.example/challenge/SESSION-1/step"))
@@ -73,6 +89,11 @@ class UrlsTest {
         assertEquals("https://payriff.com", Urls.redact("https://payriff.com/api/v3"))
         assertEquals("https://api.payriff.com.evil.example", Urls.redact("https://api.payriff.com.evil.example/api/v3/client/orders/o1"))
         assertEquals("https://evil-api.payriff.com.example", Urls.redact("https://evil-api.payriff.com.example/x"))
+        assertEquals("https://pay.gccpay.sa", Urls.redact("https://pay.gccpay.sa/order/o1"))
+        assertEquals("https://gccpay.sa", Urls.redact("https://gccpay.sa/api/v3"))
+        assertEquals("https://api.gccpay.sa.evil.example", Urls.redact("https://api.gccpay.sa.evil.example/api/v3/client/orders/o1"))
+        assertEquals("https://evil-api.gccpay.sa", Urls.redact("https://evil-api.gccpay.sa/x"))
+        assertEquals("https://evil.example", Urls.redact("https://api.gccpay.sa@evil.example/api/v3/client/orders/o1"))
     }
 
     @Test

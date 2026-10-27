@@ -19,6 +19,7 @@ import com.payriff.android.PayriffPayment;
 import com.payriff.android.PayriffPaymentStatus;
 import com.payriff.android.PayriffPaymentView;
 import com.payriff.android.PayriffPaymentViewStyle;
+import com.payriff.android.PayriffRegion;
 import com.payriff.android.PayriffResult;
 import com.payriff.android.PayriffTextStyle;
 
@@ -35,6 +36,7 @@ final class JavaInterop {
         PayriffConfig config = new PayriffConfig.Builder()
                 .publishableKey("pr_pk_live_your_key")
                 .environment(PayriffEnvironment.SANDBOX)
+                .region(PayriffRegion.AZ)
                 .language(PayriffLanguage.AZ)
                 .enableLogging(true)
                 .allowScreenCaptureInDebug(false)
@@ -47,7 +49,7 @@ final class JavaInterop {
         PayriffLogger.setListener(entry -> android.util.Log.d("JavaInterop", entry.getFormatted() + " @" + entry.getTimestampMillis()));
         return "Payriff " + Payriff.getVersion() + " (" + Payriff.VERSION + ")"
                 + ", in progress: " + Payriff.isPaymentInProgress()
-                + ", sandbox API: " + PayriffEnvironment.SANDBOX.getApiBaseUrl()
+                + ", sandbox API: " + new PayriffConfig.Builder().environment(PayriffEnvironment.SANDBOX).build().getApiBaseUrl()
                 + ", PAID is " + PayriffPaymentStatus.fromRaw("PAID");
     }
 
