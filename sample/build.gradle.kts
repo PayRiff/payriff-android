@@ -10,7 +10,9 @@ plugins {
 //   payriff.publishableKey=pr_pk_live_...  (the card flow's publishable key)
 //   payriff.environment=SANDBOX            (SANDBOX or PRODUCTION)
 //   payriff.region=AZ                      (AZ or SA; SA has no sandbox: SANDBOX payments go to production)
-// They are compiled into the DEBUG BuildConfig only; release builds have no publishable key.
+//   payriff.googlePay=false                (true: Google Pay in the payment view, PayriffConfig.googlePay)
+//   payriff.googlePayMerchantId=           (optional: the Google merchant ID from the Google Pay & Wallet Console)
+// They are compiled into the DEBUG BuildConfig only; release builds have no publishable key and no Google Pay.
 // The example holds no secret key: your server creates the order with its secret key (POST /api/v3/orders).
 val localProperties = Properties().apply {
     val file = rootProject.file("local.properties")
@@ -53,11 +55,15 @@ android {
             buildConfigField("String", "PAYRIFF_ENVIRONMENT", javaString(localValue("payriff.environment").ifEmpty { "SANDBOX" }))
             buildConfigField("String", "PAYRIFF_REGION", javaString(localValue("payriff.region").ifEmpty { "AZ" }))
             buildConfigField("String", "PAYRIFF_PUBLISHABLE_KEY", javaString(localValue("payriff.publishableKey")))
+            buildConfigField("boolean", "PAYRIFF_GOOGLE_PAY", localValue("payriff.googlePay").equals("true", ignoreCase = true).toString())
+            buildConfigField("String", "PAYRIFF_GOOGLE_PAY_MERCHANT_ID", javaString(localValue("payriff.googlePayMerchantId")))
         }
         release {
             buildConfigField("String", "PAYRIFF_ENVIRONMENT", "\"SANDBOX\"")
             buildConfigField("String", "PAYRIFF_REGION", "\"AZ\"")
             buildConfigField("String", "PAYRIFF_PUBLISHABLE_KEY", "\"\"")
+            buildConfigField("boolean", "PAYRIFF_GOOGLE_PAY", "false")
+            buildConfigField("String", "PAYRIFF_GOOGLE_PAY_MERCHANT_ID", "\"\"")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             // The example is never published; sign release builds with the debug key so they can be installed.

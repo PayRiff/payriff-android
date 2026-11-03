@@ -31,13 +31,14 @@ import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
 
 /**
- * Receives the [PayriffResult] of a card payment, on the main thread: from [PayriffCardPaymentLauncher.confirm], and as
- * [PayriffPaymentView.onResultListener].
+ * Receives the [PayriffResult] of a payment, on the main thread: of a card from [PayriffCardPaymentLauncher.confirm],
+ * of a card or Google Pay as [PayriffPaymentView.onResultListener], and of Google Pay from
+ * [PayriffGooglePayButton.setOnResultListener].
  */
 public fun interface PayriffCardResultCallback {
     /**
-     * Called once per confirmed payment. As [PayriffPaymentView.onResultListener], also called once with a fatal error
-     * that ends the order ([PayriffError.isFatal]).
+     * Called once per payment. As [PayriffPaymentView.onResultListener], also called once with a fatal error that ends
+     * the order ([PayriffError.isFatal]).
      */
     public fun onResult(result: PayriffResult)
 }

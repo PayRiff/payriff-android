@@ -20,7 +20,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Entry point of the Payriff SDK, which pays orders with a card typed into the SDK's own form.
+ * Entry point of the Payriff SDK, which pays orders with a card typed into the SDK's own form, or with Google Pay.
  *
  * Your server creates the order with its secret key and gives the app the order's `orderId` and `clientSecret`. The
  * app holds only the publishable key, never the secret key:
@@ -28,8 +28,9 @@ import kotlinx.coroutines.launch
  * 1. Call [configure] once in `Application.onCreate()` with your [PayriffConfig.publishableKey], so the configuration
  *    is also available when Android recreates your process during 3-D Secure.
  * 2. Show [PayriffPaymentView], the default payment screen, with the order's `orderId` and `clientSecret`: it shows
- *    the amount, the card form and the Pay button, and pays. To build your own screen instead, show a
- *    [PayriffCardForm] and the order's details from [retrieveOrder], and pay with [PayriffCardPaymentLauncher.confirm].
+ *    the amount, the card form and the Pay button, and Google Pay with [PayriffConfig.googlePay], and pays. To build
+ *    your own screen instead, show a [PayriffCardForm] and the order's details from [retrieveOrder], and pay with
+ *    [PayriffCardPaymentLauncher.confirm], or with a [PayriffGooglePayButton].
  * 3. Handle the [PayriffResult]. Only [PayriffResult.Success] means paid; fulfil the order on your server once it has
  *    confirmed the payment.
  */
@@ -52,9 +53,9 @@ public object Payriff {
         get() = VERSION
 
     /**
-     * `true` while a card payment of this SDK runs, from [PayriffCardPaymentLauncher.confirm] until its result, the
-     * 3-D Secure sheet included. A confirm started meanwhile returns [PayriffResult.Failed] with
-     * [PayriffErrorCode.PAYMENT_IN_PROGRESS].
+     * `true` while a card or Google Pay payment of this SDK runs, from [PayriffCardPaymentLauncher.confirm] or the
+     * Google Pay button until its result, the Google Pay and 3-D Secure sheets included. A payment started meanwhile
+     * returns [PayriffResult.Failed] with [PayriffErrorCode.PAYMENT_IN_PROGRESS].
      */
     @JvmStatic
     public val isPaymentInProgress: Boolean

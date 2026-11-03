@@ -13,6 +13,12 @@ mavenPublish = "0.35.0"
 androidxActivity = "1.9.3"
 androidxCore = "1.13.1"
 coroutines = "1.9.0"
+# Google Pay (CONTRACT §17.5): the SDK's one third-party dependency. Pinned at 19.5.0, as in the Flutter plugin: the code
+# also runs on 20.x, and a lower pin never forces an app onto 20.0.0, which removed AutoResolveHelper.resolveTask.
+playServicesWallet = "19.5.0"
+# play-services-wallet depends on androidx.fragment 1.0.0, whose FragmentActivity rejects the request codes of the
+# Activity Result API (the 3-D Secure and Google Pay sheets). 1.3.0 fixed it; 1.3.6 is the floor of that line.
+androidxFragment = "1.3.6"
 
 # Example app only (the sample's bottom sheet, dialogs and theme); never a dependency of the library.
 material = "1.13.0"
@@ -28,7 +34,9 @@ orgJson = "20180813"
 [libraries]
 androidx-activity = { module = "androidx.activity:activity", version.ref = "androidxActivity" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidxCore" }
+androidx-fragment = { module = "androidx.fragment:fragment", version.ref = "androidxFragment" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+play-services-wallet = { module = "com.google.android.gms:play-services-wallet", version.ref = "playServicesWallet" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
 material = { module = "com.google.android.material:material", version.ref = "material" }
 junit = { module = "junit:junit", version.ref = "junit" }

@@ -39,6 +39,14 @@ internal object HostApp {
         debuggable = (app.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     }
 
+    /** The app's label (the application label), the last fallback of the Google Pay merchant name (CONTRACT §17.4). */
+    fun label(context: Context): String? = try {
+        val app = context.applicationContext ?: context
+        app.applicationInfo.loadLabel(app.packageManager).toString().trim().takeIf { it.isNotEmpty() }
+    } catch (e: RuntimeException) {
+        null
+    }
+
     /** Replaces the recorded facts. Only for JVM unit tests, where no `Context` exists. */
     @VisibleForTesting
     fun setForTests(debuggable: Boolean?, packageName: String? = null) {

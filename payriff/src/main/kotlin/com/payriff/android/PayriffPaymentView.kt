@@ -3,6 +3,8 @@ package com.payriff.android
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.res.Configuration
+import android.os.Bundle
+import android.os.Parcelable
 import android.text.SpannableString
 import android.text.Spanned
 import android.util.AttributeSet
@@ -16,9 +18,11 @@ import android.widget.TextView
 import androidx.activity.result.ActivityResultRegistry
 import androidx.activity.result.ActivityResultRegistryOwner
 import androidx.core.content.ContextCompat
+import androidx.core.os.BundleCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.payriff.android.internal.DeviceIntegrityGuard
+import com.payriff.android.internal.HostApp
 import com.payriff.android.internal.PayriffLog
 import com.payriff.android.internal.card.CardFormStyles
 import com.payriff.android.internal.card.CardStrings
@@ -31,6 +35,14 @@ import com.payriff.android.internal.card.PaymentViewKeys
 import com.payriff.android.internal.card.PaymentViewPlan
 import com.payriff.android.internal.card.ResolvedTextStyle
 import com.payriff.android.internal.card.applyTextStyle
+import com.payriff.android.internal.wallet.GooglePayAvailability
+import com.payriff.android.internal.wallet.GooglePayButtonStyles
+import com.payriff.android.internal.wallet.GooglePayButtonView
+import com.payriff.android.internal.wallet.GooglePayEnvironment
+import com.payriff.android.internal.wallet.GooglePayLauncher
+import com.payriff.android.internal.wallet.GooglePayPayment
+import com.payriff.android.internal.wallet.GooglePayTransaction
+import com.payriff.android.internal.wallet.WalletDividerView
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -72,11 +84,23 @@ import kotlin.math.roundToInt
  * pads its content for the system bars, the display cutout and the keyboard from the window insets it receives, so it
  * works edge to edge; when a parent already applies and consumes them, it adds nothing.
  *
+ * **Google Pay** (CONTRACT §17.9). With [PayriffConfig.googlePay] set, the view shows Google's Pay button above the form,
+ * then "Or pay by card", once it knows that Google Pay is offered: the order lists `GOOGLE_PAY` with its gateway, the
+ * device is not compromised, and Google Pay is ready on it. Until then, and without Google Pay, the layout is the card
+ * screen above. The button runs Google Pay, then the same `/pay`, 3-D Secure and status steps as a card, and its result
+ * goes to [onResultListener] like a card result. When the customer closes the Google Pay sheet nothing is reported: they
+ * can try again or pay by card. While any payment runs, the form is locked, Pay shows its spinner and the Google Pay
+ * button is dimmed. The order whose Google Pay sheet is open is kept in the view's saved state (an order id is not
+ * secret), so a Google Pay result that arrives after the activity was recreated pays that order only, in the view with
+ * the same id.
+ *
  * [style] changes the colours, sizes and parts of the view ([PayriffPaymentViewStyle.showBadges],
  * [PayriffPaymentViewStyle.showSecureNote], [PayriffPaymentViewStyle.showPoweredBy]), the Pay button's word and the
- * secure line's text ([PayriffPaymentViewStyle.payButtonLabel], [PayriffPaymentViewStyle.secureNoteText]) and the form's
- * look ([PayriffPaymentViewStyle.formStyle], for example `PayriffCardFormStyle(showLabels = false)`). [PayriffCardForm]
- * and [PayriffCardPaymentLauncher] remain available to build your own screen.
+ * secure line's text ([PayriffPaymentViewStyle.payButtonLabel], [PayriffPaymentViewStyle.secureNoteText]), the form's
+ * look ([PayriffPaymentViewStyle.formStyle], for example `PayriffCardFormStyle(showLabels = false)`) and the Google Pay
+ * row ([PayriffPaymentViewStyle.googlePayButton], [PayriffPaymentViewStyle.walletDividerText],
+ * [PayriffPaymentViewStyle.showWalletDivider]). [PayriffCardForm], [PayriffCardPaymentLauncher] and
+ * [PayriffGooglePayButton] remain available to build your own screen.
  */
 public class PayriffPaymentView @JvmOverloads constructor(
     context: Context,
@@ -104,9 +128,9 @@ public class PayriffPaymentView @JvmOverloads constructor(
         }
 
     /**
-     * Receives, on the main thread, the result of every payment and, once, a fatal error that ends the order. The
-     * result is for your user interface: fulfil the order on your server after it has confirmed the payment. A result
-     * that arrives while no listener is set is kept until you set one.
+     * Receives, on the main thread, the result of every payment, card or Google Pay, and, once, a fatal error that ends
+     * the order. The result is for your user interface: fulfil the order on your server after it has confirmed the
+     * payment. A result that arrives while no listener is set is kept until you set one.
      */
     public var onResultListener: PayriffCardResultCallback? = null
         set(value) {
@@ -118,10 +142,12 @@ public class PayriffPaymentView @JvmOverloads constructor(
     public val orderId: String?
         get() = controller.orderId
 
-    /** `true` from Pay until its result, the 3-D Secure step included. */
+    /** `true` from Pay or Google Pay until its result, the Google Pay sheet and the 3-D Secure step included. */
     public val isProcessing: Boolean
         get() = controller.state.isPaying || form.isProcessing
 
+    private val googlePayButton = GooglePayButtonView(context)
+    private val walletDivider = WalletDividerView(context)
     private val form = PayriffCardForm(context)
     private val payButton = PayButton(context)
     private val errorLine = TextView(context)
@@ -142,6 +168,13 @@ public class PayriffPaymentView @JvmOverloads constructor(
     private var launcher: PayriffCardPaymentLauncher? = null
     private var registry: ActivityResultRegistry? = null
     private var launcherKey: String? = null
+    private var googlePay: GooglePayLauncher? = null
+
+    /**
+     * The order whose Google Pay sheet was open when the view left its window or the activity was recreated (saved
+     * state): its token, if it still arrives, pays that order only.
+     */
+    private var googlePaySheetOrderId: String? = null
 
     private val controller = PaymentViewController(
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
@@ -150,12 +183,38 @@ public class PayriffPaymentView @JvmOverloads constructor(
         deliver = { result -> deliver(result) },
         // CONTRACT §16.16: a compromised device shows view.deviceNotSupported, keeps Pay off and skips the order load.
         deviceBlock = { DeviceIntegrityGuard.blockReason(context, Payriff.config) },
+        decideGooglePay = { order -> decideGooglePay(order) },
     )
+
+    /** What a Google Pay payment of the view reports (CONTRACT §17.5, §17.8, §17.9). */
+    private val googlePayHost = object : GooglePayPayment.Host {
+        override fun resumableOrder(orderId: String): GooglePayPayment.Order? {
+            val secret = controller.clientSecret ?: return null
+            return if (orderId == controller.orderId?.trim()) GooglePayPayment.Order(orderId, secret, form.effectiveLanguage()) else null
+        }
+
+        override fun onResumed(orderId: String) {
+            form.setProcessing(true)
+            controller.paymentResumed()
+        }
+
+        override fun onClosed(orderId: String) {
+            // Nothing is reported: the customer can try Google Pay again or pay by card.
+            form.setProcessing(false)
+            controller.paymentAbandoned()
+        }
+
+        override fun onFinished(result: PayriffResult) {
+            form.onPaymentFinished(final = result !is PayriffResult.Failed)
+            controller.finishPayment(result)
+        }
+    }
 
     init {
         buildViews()
         form.onChangeListener = PayriffCardFormListener { render() }
         payButton.setOnClickListener { pay() }
+        googlePayButton.onTap = { payWithGooglePay() }
         ViewCompat.setOnApplyWindowInsetsListener(this) { _, insets ->
             applyInsets(insets)
             insets
@@ -192,6 +251,24 @@ public class PayriffPaymentView @JvmOverloads constructor(
         super.onDetachedFromWindow()
     }
 
+    override fun onSaveInstanceState(): Parcelable? {
+        val superState = super.onSaveInstanceState()
+        val sheetOrder = googlePay?.payment?.sheetOrderId ?: googlePaySheetOrderId ?: return superState
+        return Bundle().apply {
+            putParcelable(STATE_SUPER, superState)
+            putString(STATE_GOOGLE_PAY_SHEET_ORDER, sheetOrder)
+        }
+    }
+
+    override fun onRestoreInstanceState(state: Parcelable?) {
+        if (state !is Bundle || !state.containsKey(STATE_GOOGLE_PAY_SHEET_ORDER)) {
+            super.onRestoreInstanceState(state)
+            return
+        }
+        googlePaySheetOrderId = state.getString(STATE_GOOGLE_PAY_SHEET_ORDER)
+        super.onRestoreInstanceState(BundleCompat.getParcelable(state, STATE_SUPER, Parcelable::class.java))
+    }
+
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         val nowNight = isNight(newConfig)
@@ -205,6 +282,11 @@ public class PayriffPaymentView @JvmOverloads constructor(
 
     private fun buildViews() {
         content.orientation = LinearLayout.VERTICAL
+        // The wallet row (CONTRACT §17.9) shows only once Google Pay is offered.
+        googlePayButton.visibility = GONE
+        walletDivider.visibility = GONE
+        content.addView(googlePayButton, matchWidth())
+        content.addView(walletDivider, matchWidth())
         content.addView(form, matchWidth())
         content.addView(payButton, matchWidth())
 
@@ -259,8 +341,9 @@ public class PayriffPaymentView @JvmOverloads constructor(
         val padding = CardFormStyles.px(s.padding, density())
         column.setPadding(padding, padding, padding, padding)
         form.style = s.formStyle
+        val formLook = CardFormStyles.resolve(s.formStyle, night, density())
         // The error line looks like the form's error lines (CONTRACT §16.14: #EC4D3D, #EC5545 in the dark theme).
-        errorLine.applyTextStyle(CardFormStyles.resolve(s.formStyle, night, density()).error)
+        errorLine.applyTextStyle(formLook.error)
         payButton.apply(
             color = s.buttonColor ?: PaymentViewPlan.BUTTON_COLOR,
             text = PaymentViewPlan.buttonText(s),
@@ -275,6 +358,8 @@ public class PayriffPaymentView @JvmOverloads constructor(
         )
         secureText.applyTextStyle(secondary)
         footer.applyTextStyle(secondary)
+        // CONTRACT §17.9: the divider's text in the secondary colour, its lines in the border colour.
+        walletDivider.applyStyle(secondary, formLook.borderColor)
         val footerItem = PaymentViewPlan.footer(s)
         footer.visibility = if (footerItem != null) VISIBLE else GONE
         footerItem?.let { setTopMargin(footer, dp(it.gapAboveDp)) }
@@ -289,6 +374,7 @@ public class PayriffPaymentView @JvmOverloads constructor(
         val language = form.effectiveLanguage()
         val secure = PaymentViewPlan.secureText(language, style)
         if (secureText.text.toString() != secure) secureText.text = secure
+        walletDivider.text = PaymentViewPlan.walletDividerText(language, style)
         if (language != footerLanguage || night != footerNight) {
             footerLanguage = language
             footerNight = night
@@ -297,7 +383,10 @@ public class PayriffPaymentView @JvmOverloads constructor(
         render()
     }
 
-    /** The Pay button, the error line and which parts show (CONTRACT §16.14). Runs on every change of the form. */
+    /**
+     * The Pay button, the error line, the Google Pay button and which parts show (CONTRACT §16.14, §17.9). Runs on every
+     * change of the form.
+     */
     private fun render() {
         val state = controller.state
         val language = form.effectiveLanguage()
@@ -309,7 +398,9 @@ public class PayriffPaymentView @JvmOverloads constructor(
         val error = state.errorMessage(language)
         // Only a new message: setting the same text again would make TalkBack repeat it.
         if (error != null && errorLine.text.toString() != error) errorLine.text = error
-        val shown = PaymentViewPlan.content(style, showsError = error != null).associate { it.part to it.gapAboveDp }
+        val showsWallet = state.isGooglePayShown && showGooglePayButton(state.googlePayOffer)
+        googlePayButton.isEnabled = state.isGooglePayEnabled
+        val shown = PaymentViewPlan.content(style, showsError = error != null, showsWallet = showsWallet).associate { it.part to it.gapAboveDp }
         for ((part, view) in parts()) {
             val gap = shown[part]
             val visibility = if (gap != null) VISIBLE else GONE
@@ -319,7 +410,26 @@ public class PayriffPaymentView @JvmOverloads constructor(
         if (error == null && errorLine.length() > 0) errorLine.text = ""
     }
 
+    /**
+     * Google's button for [offer], in the style and theme of the view: the style's height and corner radius, else the
+     * Pay button's (CONTRACT §17.9). `false` when there is no offer or Google's button cannot be created.
+     */
+    private fun showGooglePayButton(offer: GooglePayTransaction?): Boolean {
+        offer ?: return false
+        val options = GooglePayButtonStyles.options(
+            style = style.googlePayButton,
+            night = night,
+            density = density(),
+            fallbackHeight = style.buttonHeight,
+            fallbackCornerRadius = style.buttonCornerRadius,
+            transaction = offer,
+        )
+        return googlePayButton.configure(options)
+    }
+
     private fun parts(): List<Pair<PaymentViewPlan.Part, View>> = listOf(
+        PaymentViewPlan.Part.WALLET_BUTTON to googlePayButton,
+        PaymentViewPlan.Part.WALLET_DIVIDER to walletDivider,
         PaymentViewPlan.Part.FORM to form,
         PaymentViewPlan.Part.PAY_BUTTON to payButton,
         PaymentViewPlan.Part.ERROR to errorLine,
@@ -338,6 +448,35 @@ public class PayriffPaymentView @JvmOverloads constructor(
                 current.confirm(form, orderId, clientSecret) { result -> done(result) }
             }
         }
+    }
+
+    /**
+     * The Google Pay button was tapped (CONTRACT §17.5): its payment locks the form like Pay, and reports to
+     * [googlePayHost].
+     */
+    private fun payWithGooglePay() {
+        render()
+        controller.payWithGooglePay { orderId, clientSecret, transaction ->
+            val current = googlePay
+            if (current == null) {
+                googlePayHost.onFinished(PayriffResult.Failed(PayriffError(PayriffErrorCode.PRESENTATION_FAILED, NO_ACTIVITY_MESSAGE)))
+            } else {
+                form.setProcessing(true)
+                current.payment.start(GooglePayPayment.Order(orderId, clientSecret, form.effectiveLanguage()), transaction)
+            }
+        }
+    }
+
+    /** CONTRACT §17.3 for the loaded [order], with this view's Google Pay launcher, if it has one. */
+    private suspend fun decideGooglePay(order: PayriffClientOrder): GooglePayTransaction? {
+        val current = googlePay
+        return GooglePayAvailability.decide(
+            config = Payriff.config,
+            canPresent = current != null,
+            order = order,
+            appName = HostApp.label(context),
+            isReadyToPay = { request -> current != null && current.isReadyToPay(request) },
+        )
     }
 
     /**
@@ -379,6 +518,25 @@ public class PayriffPaymentView @JvmOverloads constructor(
         registry = activityRegistry
         launcherKey = key
         launcher = PayriffCardPaymentLauncher.forRegistry(activityRegistry, key) { result -> onRestoredResult(result) }
+        registerGooglePay(activityRegistry, key)
+    }
+
+    /**
+     * Google Pay's launcher (CONTRACT §17.5), when [PayriffConfig.googlePay] is set: the Google Pay sheet and its 3-D
+     * Secure sheet, under keys made from [key], so their results reach the view with the same id after a recreation.
+     */
+    private fun registerGooglePay(activityRegistry: ActivityResultRegistry, key: String) {
+        val resumeOrderId = googlePaySheetOrderId
+        googlePaySheetOrderId = null
+        val config = Payriff.config
+        if (config?.googlePay == null) return
+        val activity = GooglePayLauncher.activityOf(context) ?: return
+        googlePay = try {
+            GooglePayLauncher(activity, activityRegistry, key, GooglePayEnvironment.of(config.apiBaseUrl), googlePayHost, resumeOrderId)
+        } catch (e: RuntimeException) {
+            PayriffLog.warning { "Google Pay is not available: ${e.javaClass.simpleName}" }
+            null
+        }
     }
 
     /**
@@ -388,7 +546,9 @@ public class PayriffPaymentView @JvmOverloads constructor(
     private fun releaseLauncher() {
         val current = launcher ?: return
         launcher = null
-        val awaitingSheet = current.release()
+        val awaitingCardSheet = current.release()
+        // One payment runs at a time: the card's 3-D Secure sheet, or Google Pay's sheets.
+        val awaitingSheet = releaseGooglePay() || awaitingCardSheet
         val activityRegistry = registry
         val key = launcherKey
         if (activityRegistry != null && key != null) PaymentViewKeys.release(activityRegistry, key)
@@ -398,6 +558,18 @@ public class PayriffPaymentView @JvmOverloads constructor(
             form.setProcessing(false)
             controller.paymentAbandoned()
         }
+    }
+
+    /**
+     * Unregisters Google Pay's launcher. Returns `true` when its Google Pay or 3-D Secure sheet will still deliver a
+     * result; the order of an open Google Pay sheet is kept for the next launcher and the saved state.
+     */
+    private fun releaseGooglePay(): Boolean {
+        val current = googlePay ?: return false
+        googlePay = null
+        val awaiting = current.release()
+        googlePaySheetOrderId = current.payment.sheetOrderId
+        return awaiting
     }
 
     /** Pads the content for the system bars, the display cutout and the keyboard (CONTRACT §16.14). */
@@ -454,6 +626,8 @@ public class PayriffPaymentView @JvmOverloads constructor(
     private companion object {
         const val NO_ACTIVITY_MESSAGE =
             "PayriffPaymentView must be shown in a ComponentActivity (for example an AppCompatActivity) to run 3-D Secure."
+        const val STATE_SUPER = "payriff.paymentView.super"
+        const val STATE_GOOGLE_PAY_SHEET_ORDER = "payriff.paymentView.googlePaySheetOrderId"
 
         /** The activity (or other owner) of the `ActivityResultRegistry` behind [context], if any. */
         fun registryOwner(context: Context): ActivityResultRegistryOwner? {

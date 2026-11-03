@@ -1,10 +1,13 @@
 package com.payriff.android.internal.card
 
+import com.payriff.android.Payriff
 import com.payriff.android.PayriffClientOrder
 import com.payriff.android.PayriffError
 import com.payriff.android.PayriffErrorCode
 import com.payriff.android.PayriffLanguage
 import com.payriff.android.PayriffResult
+import com.payriff.android.internal.wallet.GooglePayAvailability
+import com.payriff.android.internal.wallet.GooglePayTransaction
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -12,8 +15,8 @@ import kotlinx.coroutines.launch
 
 /**
  * The state of [com.payriff.android.PayriffPaymentView] and the rules that turn it into what the view shows (CONTRACT
- * §16.14): the Pay button's title, whether it is enabled or busy, and the error line under it. Pure Kotlin, so the JVM
- * unit tests check the rules.
+ * §16.14, §17.9): the Pay button's title, whether it is enabled or busy, the error line under it, and the Google Pay
+ * button above the form. Pure Kotlin, so the JVM unit tests check the rules.
  */
 internal class PaymentViewState {
 
@@ -65,6 +68,14 @@ internal class PaymentViewState {
     /** Whether the device block was already reported through the result listener; it is reported once per order. */
     private var deviceBlockReported = false
 
+    /** Google Pay for the loaded order (CONTRACT §17.3): its values when offered; `null` while undecided or not offered. */
+    var googlePayOffer: GooglePayTransaction? = null
+        private set
+
+    /** Whether CONTRACT §17.3 was decided for the loaded order. Until then the Google Pay button does not show. */
+    var isGooglePayDecided: Boolean = false
+        private set
+
     /** The order once loaded, payable or not. */
     val loadedOrder: PayriffClientOrder?
         get() = when (val current = order) {
@@ -78,6 +89,21 @@ internal class PaymentViewState {
      * replaces the word "Pay" when it is set.
      */
     fun payTitle(language: PayriffLanguage, label: String? = null): String = PaymentViewPlan.payTitle(language, loadedOrder, label)
+
+    /** Whether the Google Pay button shows above the form: Google Pay is offered and the device was not blocked. */
+    val isGooglePayShown: Boolean
+        get() = googlePayOffer != null && deviceBlock == null
+
+    /**
+     * Whether the Google Pay button can be tapped: it shows, the order is not paid from this view yet and no payment
+     * runs, card or wallet. Otherwise it is dimmed to 50% (CONTRACT §17.9).
+     */
+    val isGooglePayEnabled: Boolean
+        get() = isGooglePayShown && !isFinished && endedBy == null && !isPaying && !isFormProcessing
+
+    /** Whether Google Pay still has to be decided for the loaded order. */
+    val needsGooglePayDecision: Boolean
+        get() = loadedOrder != null && !isGooglePayDecided
 
     /**
      * Whether Pay can be tapped: the order is payable and not paid from this view yet, every field is valid and no
@@ -124,6 +150,14 @@ internal class PaymentViewState {
         fatalReported = false
         deviceBlock = null
         deviceBlockReported = false
+        googlePayOffer = null
+        isGooglePayDecided = false
+    }
+
+    /** CONTRACT §17.3 was decided for the loaded order: [offer] when Google Pay is offered, else `null`. */
+    fun googlePayDidDecide(offer: GooglePayTransaction?) {
+        googlePayOffer = offer
+        isGooglePayDecided = true
     }
 
     /**
@@ -176,7 +210,10 @@ internal class PaymentViewState {
         if (error.isFatal) fatalReported = true
     }
 
-    /** The payment stopped before the 3-D Secure sheet, without a result (the view left its window). */
+    /**
+     * The payment stopped without a result: before the 3-D Secure sheet (the view left its window), or the customer closed
+     * the Google Pay sheet (CONTRACT §17.8).
+     */
     fun paymentAbandoned() {
         isPaying = false
     }
@@ -186,12 +223,15 @@ internal class PaymentViewState {
 }
 
 /**
- * What [com.payriff.android.PayriffPaymentView] does (CONTRACT §16.14), apart from drawing: it loads the order when the
- * view appears, runs Pay, and reports every payment result, and a fatal load error once, to [deliver]. Pure Kotlin with
- * coroutines; the view passes the main-thread scope, `Payriff.retrieveOrder` and the 3-D Secure launcher, the JVM unit
- * tests a test scope and fakes. Main thread only.
+ * What [com.payriff.android.PayriffPaymentView] does (CONTRACT §16.14, §17.9), apart from drawing: it loads the order
+ * when the view appears and decides Google Pay for it, runs Pay and Google Pay, and reports every payment result, and a
+ * fatal load error once, to [deliver]. Pure Kotlin with coroutines; the view passes the main-thread scope,
+ * `Payriff.retrieveOrder`, the Google Pay decision and the launchers, the JVM unit tests a test scope and fakes. Main
+ * thread only.
  *
  * @param onStateChanged Called after every change of [state], before [deliver].
+ * @param decideGooglePay CONTRACT §17.3 for a loaded order ([GooglePayAvailability.decide]): the Google Pay values when
+ *   it is offered, else `null`.
  */
 internal class PaymentViewController(
     private val scope: CoroutineScope,
@@ -199,6 +239,7 @@ internal class PaymentViewController(
     private val onStateChanged: () -> Unit,
     private val deliver: (PayriffResult) -> Unit,
     private val deviceBlock: () -> PayriffError? = { null },
+    private val decideGooglePay: suspend (PayriffClientOrder) -> GooglePayTransaction? = { null },
 ) {
     val state = PaymentViewState()
 
@@ -206,7 +247,9 @@ internal class PaymentViewController(
     var orderId: String? = null
         private set
 
-    private var clientSecret: String? = null
+    /** The order's `clientSecret` of [setOrder]. */
+    var clientSecret: String? = null
+        private set
     private var onScreen = false
     private var loadJob: Job? = null
 
@@ -225,9 +268,10 @@ internal class PaymentViewController(
     }
 
     /**
-     * The view is on screen. First the device-integrity check (CONTRACT §16.16): a block shows the message, keeps Pay
-     * disabled, skips the order load and reports the failure once. Otherwise it loads the order when it needs one
-     * ([PaymentViewState.needsOrder]).
+     * The view is on screen. First the device-integrity check (CONTRACT §16.16, §17.11): a block shows the message, keeps
+     * Pay disabled, hides Google Pay, skips the order load and reports the failure once. Otherwise it loads the order
+     * when it needs one ([PaymentViewState.needsOrder]), or decides Google Pay for a loaded order whose decision was
+     * interrupted.
      */
     fun appear() {
         onScreen = true
@@ -236,11 +280,17 @@ internal class PaymentViewController(
             cancelLoad()
             val report = state.deviceDidBlock(blocked)
             onStateChanged()
+            if (report != null) GooglePayAvailability.deviceBlocked(Payriff.config)
             report?.let(deliver)
             return
         }
         state.deviceDidPass()
-        if (state.needsOrder && loadJob?.isActive != true) load()
+        if (loadJob?.isActive == true) return
+        if (state.needsOrder) {
+            load()
+        } else {
+            state.loadedOrder?.takeIf { state.needsGooglePayDecision }?.let { decide(it, ++loadGeneration) }
+        }
     }
 
     /** The view left its window: a running load stops, and starts again when the view appears. */
@@ -268,6 +318,28 @@ internal class PaymentViewController(
         }
     }
 
+    /**
+     * The Google Pay button was tapped (CONTRACT §17.5). When it is enabled, [start] opens Google Pay for the order with
+     * its Google Pay values; the payment then ends in [finishPayment], or in [paymentAbandoned] when the customer closes
+     * the Google Pay sheet.
+     */
+    fun payWithGooglePay(start: (orderId: String, clientSecret: String, transaction: GooglePayTransaction) -> Unit) {
+        val id = orderId ?: return
+        val secret = clientSecret ?: return
+        val offer = state.googlePayOffer ?: return
+        if (!state.isGooglePayEnabled) return
+        state.paymentDidStart()
+        onStateChanged()
+        start(id, secret, offer)
+    }
+
+    /** A Google Pay payment continues after the activity was recreated: the view is busy until its result. */
+    fun paymentResumed() {
+        if (state.isPaying) return
+        state.paymentDidStart()
+        onStateChanged()
+    }
+
     /** A payment's result: also one that arrived after the activity was recreated during 3-D Secure. */
     fun finishPayment(result: PayriffResult) {
         state.paymentDidFinish(result)
@@ -275,7 +347,7 @@ internal class PaymentViewController(
         deliver(result)
     }
 
-    /** The payment stopped before the 3-D Secure sheet without a result. */
+    /** The payment stopped without a result: before the 3-D Secure sheet, or the Google Pay sheet was closed. */
     fun paymentAbandoned() {
         if (!state.isPaying) return
         state.paymentAbandoned()
@@ -304,7 +376,26 @@ internal class PaymentViewController(
             if (generation != loadGeneration) return@launch
             state.orderDidLoad(loaded)
             onStateChanged()
+            decideGooglePayNow(loaded, generation)
         }
+    }
+
+    /** Decides Google Pay for the loaded [order] (CONTRACT §17.3), in a job of its own. */
+    private fun decide(order: PayriffClientOrder, generation: Int) {
+        loadJob = scope.launch { decideGooglePayNow(order, generation) }
+    }
+
+    private suspend fun decideGooglePayNow(order: PayriffClientOrder, generation: Int) {
+        val offer = try {
+            decideGooglePay(order)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (unexpected: Exception) {
+            GooglePayAvailability.notOffered("the check failed (${unexpected.javaClass.simpleName})")
+        }
+        if (generation != loadGeneration) return
+        state.googlePayDidDecide(offer)
+        onStateChanged()
     }
 
     private fun loadFailed(error: PayriffError) {

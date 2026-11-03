@@ -179,6 +179,7 @@ class PayriffApiTest {
             .enableLogging(true)
             .allowScreenCaptureInDebug(true)
             .allowCompromisedDevices(true)
+            .googlePay(PayriffGooglePayConfig(merchantId = " BCR2DN4TABCDEF ", merchantName = "Shop"))
             .build()
         val named = PayriffConfig(
             publishableKey = PUBLISHABLE_KEY,
@@ -188,15 +189,21 @@ class PayriffApiTest {
             enableLogging = true,
             allowScreenCaptureInDebug = true,
             allowCompromisedDevices = true,
+            googlePay = PayriffGooglePayConfig(merchantId = "BCR2DN4TABCDEF", merchantName = "Shop"),
         )
         assertEquals(named.toString(), built.toString())
+        assertEquals(named.googlePay, built.googlePay)
         assertEquals(named.toString(), named.newBuilder().build().toString())
+        assertEquals(named.googlePay, named.newBuilder().build().googlePay)
         assertEquals(PayriffConfig().toString(), PayriffConfig.Builder().build().toString())
+        // CONTRACT §11, §17.2: Google Pay shows as on or off.
         assertEquals(
             "PayriffConfig(publishableKey=pr_pk_live_***(${PUBLISHABLE_KEY.length}), environment=SANDBOX, region=SA, " +
-                "language=RU, enableLogging=true, allowScreenCaptureInDebug=true, allowCompromisedDevices=true)",
+                "language=RU, enableLogging=true, allowScreenCaptureInDebug=true, allowCompromisedDevices=true, googlePay=on)",
             named.toString(),
         )
+        assertTrue(PayriffConfig().toString().endsWith(", googlePay=off)"))
+        assertNull(named.newBuilder().googlePay(null).build().googlePay)
         val defaults = PayriffConfig()
         assertNull(defaults.publishableKey)
         assertEquals(PayriffEnvironment.PRODUCTION, defaults.environment)
@@ -206,6 +213,7 @@ class PayriffApiTest {
         assertFalse(defaults.enableLogging)
         assertFalse("the card form and the sheet are protected by default", defaults.allowScreenCaptureInDebug)
         assertFalse("compromised devices are blocked by default", defaults.allowCompromisedDevices)
+        assertNull("Google Pay is off by default", defaults.googlePay)
     }
 
     /** CONTRACT §16.0 item 4: protected by default; only a debuggable app may opt out. */
@@ -310,7 +318,7 @@ class PayriffApiTest {
     /** The helper names shared by every Payriff SDK. */
     @Test
     fun helperNamesMatchTheContract() {
-        assertEquals("1.0.0-rc.2", Payriff.version)
+        assertEquals("1.0.0-rc.3", Payriff.version)
         assertEquals(Payriff.VERSION, Payriff.version)
 
         assertFalse(Payriff.isPaymentInProgress)

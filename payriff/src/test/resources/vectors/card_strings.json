@@ -1,5 +1,5 @@
 {
-  "description": "Card form copy in az/en/ru. Labels, the \"Card information\" group label and the placeholders follow Payriff's hosted payment page (pay.payriff.com, owner request 2026-10-21); the placeholders are the same in every language, as on that page. Field error messages come from the web SDK (fields/i18n.js). Use these exact strings. An errorCode with no specific message falls back to that field's \"invalid\" message. See CONTRACT.md §16.4-§16.5. view.* is the payment view copy (§16.14): pay is followed by the amount; poweredBy is split at \"Payriff\", which is replaced by the logo.",
+  "description": "Card form copy in az/en/ru. Labels, the \"Card information\" group label and the placeholders follow Payriff's hosted payment page (pay.payriff.com, owner request 2026-10-21); the placeholders are the same in every language, as on that page. Field error messages come from the web SDK (fields/i18n.js). Use these exact strings. An errorCode with no specific message falls back to that field's \"invalid\" message. See CONTRACT.md §16.4-§16.5. view.* is the payment view copy (§16.14): pay is followed by the amount; poweredBy is split at \"Payriff\", which is replaced by the logo. view.orPayByCard is the wallet divider (§17.9).",
   "messages": {
     "az": {
       "number": {
@@ -43,7 +43,8 @@
         "secure": "PCI DSS ilə təhlükəsiz ödəniş",
         "poweredBy": "Payriff tərəfindən hazırlanıb",
         "notPayable": "Bu sifarişi kartla ödəmək mümkün deyil",
-        "deviceNotSupported": "Təhlükəsizlik səbəbilə bu cihazda kartla ödəniş mümkün deyil"
+        "deviceNotSupported": "Təhlükəsizlik səbəbilə bu cihazda kartla ödəniş mümkün deyil",
+        "orPayByCard": "Və ya kartla ödəyin"
       }
     },
     "en": {
@@ -88,7 +89,8 @@
         "secure": "Proceed securely by PCI DSS",
         "poweredBy": "Powered by Payriff",
         "notPayable": "This order cannot be paid by card",
-        "deviceNotSupported": "Card payments aren't available on this device for security reasons"
+        "deviceNotSupported": "Card payments aren't available on this device for security reasons",
+        "orPayByCard": "Or pay by card"
       }
     },
     "ru": {
@@ -133,7 +135,8 @@
         "secure": "Безопасная оплата по PCI DSS",
         "poweredBy": "При поддержке Payriff",
         "notPayable": "Этот заказ нельзя оплатить картой",
-        "deviceNotSupported": "По соображениям безопасности оплата картой на этом устройстве недоступна"
+        "deviceNotSupported": "По соображениям безопасности оплата картой на этом устройстве недоступна",
+        "orPayByCard": "Или оплатите картой"
       }
     }
   }

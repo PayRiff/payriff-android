@@ -39,7 +39,15 @@ import androidx.annotation.ColorInt
  *   logo's wordmark is light (`#E1E4E8`).
  * @property formStyle The card form inside the view ([PayriffCardForm.style]); for example
  *   `PayriffCardFormStyle(showLabels = false)` hides "Card holder" and "Card information". Its error colour and error
- *   text style are also used for the view's error line under the Pay button.
+ *   text style are also used for the view's error line under the Pay button, and its border colour for the lines of the
+ *   wallet divider.
+ * @property googlePayButton The Google Pay button above the form, when Google Pay is offered ([PayriffConfig.googlePay],
+ *   CONTRACT §17.9): Google's official button with its type, theme, corner radius and height. Without its own height and
+ *   corner radius it takes [buttonHeight] and [buttonCornerRadius].
+ * @property walletDividerText The text of the divider between the wallet button and the form, in place of "Or pay by
+ *   card" in the view's language, trimmed. `null` (the default) or a blank text keeps the localized text.
+ * @property showWalletDivider Shows the divider ("Or pay by card" between two lines) under the wallet button. Defaults to
+ *   `true`. Without a wallet button there is never a divider.
  */
 public data class PayriffPaymentViewStyle(
     @ColorInt public val backgroundColor: Int? = null,
@@ -55,6 +63,9 @@ public data class PayriffPaymentViewStyle(
     public val secureNoteText: String? = null,
     public val showPoweredBy: Boolean = true,
     public val formStyle: PayriffCardFormStyle = PayriffCardFormStyle(),
+    public val googlePayButton: PayriffGooglePayButtonStyle = PayriffGooglePayButtonStyle(),
+    public val walletDividerText: String? = null,
+    public val showWalletDivider: Boolean = true,
 ) {
 
     /** Returns a [Builder] pre-filled with this style. */
@@ -104,6 +115,15 @@ public data class PayriffPaymentViewStyle(
 
         /** Sets [PayriffPaymentViewStyle.formStyle]. */
         public fun formStyle(value: PayriffCardFormStyle): Builder = apply { style = style.copy(formStyle = value) }
+
+        /** Sets [PayriffPaymentViewStyle.googlePayButton]. */
+        public fun googlePayButton(value: PayriffGooglePayButtonStyle): Builder = apply { style = style.copy(googlePayButton = value) }
+
+        /** Sets [PayriffPaymentViewStyle.walletDividerText]. */
+        public fun walletDividerText(value: String?): Builder = apply { style = style.copy(walletDividerText = value) }
+
+        /** Sets [PayriffPaymentViewStyle.showWalletDivider]. */
+        public fun showWalletDivider(value: Boolean): Builder = apply { style = style.copy(showWalletDivider = value) }
 
         /** Creates the style. */
         public fun build(): PayriffPaymentViewStyle = style

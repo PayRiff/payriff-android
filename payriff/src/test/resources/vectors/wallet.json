@@ -1,0 +1,959 @@
+{
+  "description": "Apple Pay and Google Pay (CONTRACT §17, revision 7). Inputs are what the SDK sees; expect is what it must produce. JSON objects under expect are compared as JSON values (key order and white space do not matter). order objects are the GET order payload (§16.3); wrap them in the usual {\"code\":\"00000\",\"payload\":…} envelope when a test needs a response. amount is a JSON number, as the API sends it. X-Client-App-Id is the platform's own example id.",
+  "applePayMerchantIdentifiers": [
+    {
+      "value": "merchant.com.example.shop",
+      "valid": true,
+      "normalized": "merchant.com.example.shop"
+    },
+    {
+      "value": "  merchant.az.payriff.test\n",
+      "valid": true,
+      "normalized": "merchant.az.payriff.test"
+    },
+    {
+      "value": "",
+      "valid": false
+    },
+    {
+      "value": "   ",
+      "valid": false
+    },
+    {
+      "value": "com.example.shop",
+      "valid": false
+    },
+    {
+      "value": "merchant.",
+      "valid": false
+    },
+    {
+      "value": "Merchant.com.example",
+      "valid": false
+    },
+    {
+      "value": "merchant.com.exa mple",
+      "valid": false
+    },
+    {
+      "value": "merchant.com.ex\u0007ample",
+      "valid": false
+    }
+  ],
+  "googlePayMerchantIds": [
+    {
+      "value": " BCR2DN4TABCDEF ",
+      "normalized": "BCR2DN4TABCDEF"
+    },
+    {
+      "value": "   ",
+      "normalized": null
+    },
+    {
+      "value": null,
+      "normalized": null
+    }
+  ],
+  "availability": {
+    "description": "Assumes the wallet's config is set and valid, the device can pay and is not compromised (§17.3 items 1, 2 and 4).",
+    "cases": [
+      {
+        "name": "Google Pay listed with gateway parameters",
+        "order": {
+          "orderId": "o1",
+          "amount": 10.5,
+          "currency": "AZN",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "CREATED",
+          "language": "AZ",
+          "paymentMethods": [
+            "CARD",
+            "GOOGLE_PAY"
+          ],
+          "googlePay": {
+            "gateway": "payriff",
+            "gatewayMerchantId": "BCR2DN4T"
+          },
+          "applePay": null
+        },
+        "expect": {
+          "applePay": false,
+          "googlePay": true
+        }
+      },
+      {
+        "name": "Apple Pay listed",
+        "order": {
+          "orderId": "o1",
+          "amount": 10.5,
+          "currency": "AZN",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "CREATED",
+          "language": "AZ",
+          "paymentMethods": [
+            "CARD",
+            "APPLE_PAY"
+          ],
+          "googlePay": null,
+          "applePay": {
+            "merchantIdentifier": "merchant.com.payriff"
+          }
+        },
+        "expect": {
+          "applePay": true,
+          "googlePay": false
+        }
+      },
+      {
+        "name": "Apple Pay needs no applePay object",
+        "order": {
+          "orderId": "o1",
+          "amount": 10.5,
+          "currency": "AZN",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "PENDING",
+          "language": "AZ",
+          "paymentMethods": [
+            "APPLE_PAY"
+          ],
+          "googlePay": null,
+          "applePay": null
+        },
+        "expect": {
+          "applePay": true,
+          "googlePay": false
+        }
+      },
+      {
+        "name": "Google Pay without gatewayMerchantId is not offered",
+        "order": {
+          "orderId": "o1",
+          "amount": 10.5,
+          "currency": "AZN",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "CREATED",
+          "language": "AZ",
+          "paymentMethods": [
+            "CARD",
+            "APPLE_PAY",
+            "GOOGLE_PAY"
+          ],
+          "googlePay": {
+            "gateway": "payriff",
+            "gatewayMerchantId": "  "
+          },
+          "applePay": null
+        },
+        "expect": {
+          "applePay": true,
+          "googlePay": false
+        }
+      },
+      {
+        "name": "Google Pay without googlePay object is not offered",
+        "order": {
+          "orderId": "o1",
+          "amount": 10.5,
+          "currency": "AZN",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "CREATED",
+          "language": "AZ",
+          "paymentMethods": [
+            "GOOGLE_PAY"
+          ],
+          "googlePay": null,
+          "applePay": null
+        },
+        "expect": {
+          "applePay": false,
+          "googlePay": false
+        }
+      },
+      {
+        "name": "a wallet needs no CARD",
+        "order": {
+          "orderId": "o1",
+          "amount": 10.5,
+          "currency": "AZN",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "CREATED",
+          "language": "AZ",
+          "paymentMethods": [
+            "GOOGLE_PAY"
+          ],
+          "googlePay": {
+            "gateway": "payriff",
+            "gatewayMerchantId": "BCR2DN4T"
+          },
+          "applePay": null
+        },
+        "expect": {
+          "applePay": false,
+          "googlePay": true
+        }
+      },
+      {
+        "name": "a paid order offers nothing",
+        "order": {
+          "orderId": "o1",
+          "amount": 10.5,
+          "currency": "AZN",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "PAID",
+          "language": "AZ",
+          "paymentMethods": [
+            "CARD",
+            "APPLE_PAY",
+            "GOOGLE_PAY"
+          ],
+          "googlePay": {
+            "gateway": "payriff",
+            "gatewayMerchantId": "BCR2DN4T"
+          },
+          "applePay": null
+        },
+        "expect": {
+          "applePay": false,
+          "googlePay": false
+        }
+      },
+      {
+        "name": "card only",
+        "order": {
+          "orderId": "o1",
+          "amount": 10.5,
+          "currency": "AZN",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "CREATED",
+          "language": "AZ",
+          "paymentMethods": [
+            "CARD"
+          ],
+          "googlePay": null,
+          "applePay": null
+        },
+        "expect": {
+          "applePay": false,
+          "googlePay": false
+        }
+      },
+      {
+        "name": "method names are case-sensitive",
+        "order": {
+          "orderId": "o1",
+          "amount": 10.5,
+          "currency": "AZN",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "CREATED",
+          "language": "AZ",
+          "paymentMethods": [
+            "apple_pay",
+            "google_pay"
+          ],
+          "googlePay": {
+            "gateway": "payriff",
+            "gatewayMerchantId": "BCR2DN4T"
+          },
+          "applePay": null
+        },
+        "expect": {
+          "applePay": false,
+          "googlePay": false
+        }
+      },
+      {
+        "name": "no paymentMethods",
+        "order": {
+          "orderId": "o1",
+          "amount": 10.5,
+          "currency": "AZN",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "CREATED",
+          "language": "AZ",
+          "googlePay": {
+            "gateway": "payriff",
+            "gatewayMerchantId": "BCR2DN4T"
+          },
+          "applePay": null
+        },
+        "expect": {
+          "applePay": false,
+          "googlePay": false
+        }
+      }
+    ]
+  },
+  "amounts": [
+    {
+      "amount": 10.5,
+      "formatted": "10.50"
+    },
+    {
+      "amount": 10,
+      "formatted": "10.00"
+    },
+    {
+      "amount": 0.1,
+      "formatted": "0.10"
+    },
+    {
+      "amount": 1.02,
+      "formatted": "1.02"
+    },
+    {
+      "amount": 0.07,
+      "formatted": "0.07"
+    },
+    {
+      "amount": 1234.5,
+      "formatted": "1234.50"
+    }
+  ],
+  "googlePayEnvironments": [
+    {
+      "region": "az",
+      "environment": "production",
+      "expect": "PRODUCTION"
+    },
+    {
+      "region": "az",
+      "environment": "sandbox",
+      "expect": "TEST"
+    },
+    {
+      "region": "sa",
+      "environment": "production",
+      "expect": "PRODUCTION"
+    },
+    {
+      "region": "sa",
+      "environment": "sandbox",
+      "expect": "PRODUCTION"
+    }
+  ],
+  "googlePayRequests": [
+    {
+      "name": "az: the order's merchant name, no merchantId",
+      "region": "az",
+      "config": {
+        "merchantId": null,
+        "merchantName": null
+      },
+      "appName": "Example Shop",
+      "order": {
+        "orderId": "o1",
+        "amount": 10.5,
+        "currency": "AZN",
+        "description": "Order #42",
+        "merchantName": "Test Merchant",
+        "status": "CREATED",
+        "language": "AZ",
+        "paymentMethods": [
+          "CARD",
+          "GOOGLE_PAY"
+        ],
+        "googlePay": {
+          "gateway": "payriff",
+          "gatewayMerchantId": "BCR2DN4T"
+        },
+        "applePay": null
+      },
+      "expect": {
+        "isReadyToPayRequest": {
+          "apiVersion": 2,
+          "apiVersionMinor": 0,
+          "allowedPaymentMethods": [
+            {
+              "type": "CARD",
+              "parameters": {
+                "allowedAuthMethods": [
+                  "PAN_ONLY",
+                  "CRYPTOGRAM_3DS"
+                ],
+                "allowedCardNetworks": [
+                  "VISA",
+                  "MASTERCARD"
+                ]
+              }
+            }
+          ]
+        },
+        "paymentDataRequest": {
+          "apiVersion": 2,
+          "apiVersionMinor": 0,
+          "merchantInfo": {
+            "merchantName": "Test Merchant"
+          },
+          "allowedPaymentMethods": [
+            {
+              "type": "CARD",
+              "parameters": {
+                "allowedAuthMethods": [
+                  "PAN_ONLY",
+                  "CRYPTOGRAM_3DS"
+                ],
+                "allowedCardNetworks": [
+                  "VISA",
+                  "MASTERCARD"
+                ]
+              },
+              "tokenizationSpecification": {
+                "type": "PAYMENT_GATEWAY",
+                "parameters": {
+                  "gateway": "payriff",
+                  "gatewayMerchantId": "BCR2DN4T"
+                }
+              }
+            }
+          ],
+          "transactionInfo": {
+            "totalPriceStatus": "FINAL",
+            "totalPrice": "10.50",
+            "currencyCode": "AZN",
+            "countryCode": "AZ"
+          }
+        },
+        "buttonAllowedPaymentMethods": [
+          {
+            "type": "CARD",
+            "parameters": {
+              "allowedAuthMethods": [
+                "PAN_ONLY",
+                "CRYPTOGRAM_3DS"
+              ],
+              "allowedCardNetworks": [
+                "VISA",
+                "MASTERCARD"
+              ]
+            },
+            "tokenizationSpecification": {
+              "type": "PAYMENT_GATEWAY",
+              "parameters": {
+                "gateway": "payriff",
+                "gatewayMerchantId": "BCR2DN4T"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "sa: the config's merchantId and merchantName",
+      "region": "sa",
+      "config": {
+        "merchantId": "BCR2DN4TABCDEF",
+        "merchantName": "Shop KSA"
+      },
+      "appName": "Example Shop",
+      "order": {
+        "orderId": "o1",
+        "amount": 25,
+        "currency": "SAR",
+        "description": "Order #42",
+        "merchantName": "GCC Merchant",
+        "status": "CREATED",
+        "language": "AZ",
+        "paymentMethods": [
+          "GOOGLE_PAY"
+        ],
+        "googlePay": {
+          "gateway": "payriff",
+          "gatewayMerchantId": "GCC0001"
+        },
+        "applePay": null
+      },
+      "expect": {
+        "isReadyToPayRequest": {
+          "apiVersion": 2,
+          "apiVersionMinor": 0,
+          "allowedPaymentMethods": [
+            {
+              "type": "CARD",
+              "parameters": {
+                "allowedAuthMethods": [
+                  "PAN_ONLY",
+                  "CRYPTOGRAM_3DS"
+                ],
+                "allowedCardNetworks": [
+                  "VISA",
+                  "MASTERCARD"
+                ]
+              }
+            }
+          ]
+        },
+        "paymentDataRequest": {
+          "apiVersion": 2,
+          "apiVersionMinor": 0,
+          "merchantInfo": {
+            "merchantName": "Shop KSA",
+            "merchantId": "BCR2DN4TABCDEF"
+          },
+          "allowedPaymentMethods": [
+            {
+              "type": "CARD",
+              "parameters": {
+                "allowedAuthMethods": [
+                  "PAN_ONLY",
+                  "CRYPTOGRAM_3DS"
+                ],
+                "allowedCardNetworks": [
+                  "VISA",
+                  "MASTERCARD"
+                ]
+              },
+              "tokenizationSpecification": {
+                "type": "PAYMENT_GATEWAY",
+                "parameters": {
+                  "gateway": "payriff",
+                  "gatewayMerchantId": "GCC0001"
+                }
+              }
+            }
+          ],
+          "transactionInfo": {
+            "totalPriceStatus": "FINAL",
+            "totalPrice": "25.00",
+            "currencyCode": "SAR",
+            "countryCode": "SA"
+          }
+        },
+        "buttonAllowedPaymentMethods": [
+          {
+            "type": "CARD",
+            "parameters": {
+              "allowedAuthMethods": [
+                "PAN_ONLY",
+                "CRYPTOGRAM_3DS"
+              ],
+              "allowedCardNetworks": [
+                "VISA",
+                "MASTERCARD"
+              ]
+            },
+            "tokenizationSpecification": {
+              "type": "PAYMENT_GATEWAY",
+              "parameters": {
+                "gateway": "payriff",
+                "gatewayMerchantId": "GCC0001"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "blank names fall back to the app name; the currency is upper-cased",
+      "region": "az",
+      "config": {
+        "merchantId": "  ",
+        "merchantName": "  "
+      },
+      "appName": "Example Shop",
+      "order": {
+        "orderId": "o1",
+        "amount": 0.1,
+        "currency": "azn",
+        "description": "Order #42",
+        "merchantName": "  ",
+        "status": "CREATED",
+        "language": "AZ",
+        "paymentMethods": [
+          "GOOGLE_PAY"
+        ],
+        "googlePay": {
+          "gateway": "payriff",
+          "gatewayMerchantId": "BCR2DN4T"
+        },
+        "applePay": null
+      },
+      "expect": {
+        "isReadyToPayRequest": {
+          "apiVersion": 2,
+          "apiVersionMinor": 0,
+          "allowedPaymentMethods": [
+            {
+              "type": "CARD",
+              "parameters": {
+                "allowedAuthMethods": [
+                  "PAN_ONLY",
+                  "CRYPTOGRAM_3DS"
+                ],
+                "allowedCardNetworks": [
+                  "VISA",
+                  "MASTERCARD"
+                ]
+              }
+            }
+          ]
+        },
+        "paymentDataRequest": {
+          "apiVersion": 2,
+          "apiVersionMinor": 0,
+          "merchantInfo": {
+            "merchantName": "Example Shop"
+          },
+          "allowedPaymentMethods": [
+            {
+              "type": "CARD",
+              "parameters": {
+                "allowedAuthMethods": [
+                  "PAN_ONLY",
+                  "CRYPTOGRAM_3DS"
+                ],
+                "allowedCardNetworks": [
+                  "VISA",
+                  "MASTERCARD"
+                ]
+              },
+              "tokenizationSpecification": {
+                "type": "PAYMENT_GATEWAY",
+                "parameters": {
+                  "gateway": "payriff",
+                  "gatewayMerchantId": "BCR2DN4T"
+                }
+              }
+            }
+          ],
+          "transactionInfo": {
+            "totalPriceStatus": "FINAL",
+            "totalPrice": "0.10",
+            "currencyCode": "AZN",
+            "countryCode": "AZ"
+          }
+        },
+        "buttonAllowedPaymentMethods": [
+          {
+            "type": "CARD",
+            "parameters": {
+              "allowedAuthMethods": [
+                "PAN_ONLY",
+                "CRYPTOGRAM_3DS"
+              ],
+              "allowedCardNetworks": [
+                "VISA",
+                "MASTERCARD"
+              ]
+            },
+            "tokenizationSpecification": {
+              "type": "PAYMENT_GATEWAY",
+              "parameters": {
+                "gateway": "payriff",
+                "gatewayMerchantId": "BCR2DN4T"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "applePayRequests": [
+    {
+      "name": "az: the order's merchant name",
+      "region": "az",
+      "config": {
+        "merchantIdentifier": "merchant.com.example.shop",
+        "merchantName": null
+      },
+      "appName": "Example Shop",
+      "order": {
+        "orderId": "o1",
+        "amount": 10.5,
+        "currency": "AZN",
+        "description": "Order #42",
+        "merchantName": "Test Merchant",
+        "status": "CREATED",
+        "language": "AZ",
+        "paymentMethods": [
+          "CARD",
+          "APPLE_PAY"
+        ],
+        "googlePay": null,
+        "applePay": null
+      },
+      "expect": {
+        "merchantIdentifier": "merchant.com.example.shop",
+        "countryCode": "AZ",
+        "currencyCode": "AZN",
+        "supportedNetworks": [
+          "visa",
+          "masterCard"
+        ],
+        "merchantCapabilities": [
+          "threeDSecure"
+        ],
+        "summaryItems": [
+          {
+            "label": "Test Merchant",
+            "amount": "10.50",
+            "type": "final"
+          }
+        ]
+      }
+    },
+    {
+      "name": "sa: the config's merchant name",
+      "region": "sa",
+      "config": {
+        "merchantIdentifier": " merchant.sa.shop ",
+        "merchantName": "Shop KSA"
+      },
+      "appName": "Example Shop",
+      "order": {
+        "orderId": "o1",
+        "amount": 25,
+        "currency": "SAR",
+        "description": "Order #42",
+        "merchantName": "GCC Merchant",
+        "status": "CREATED",
+        "language": "AZ",
+        "paymentMethods": [
+          "APPLE_PAY"
+        ],
+        "googlePay": null,
+        "applePay": null
+      },
+      "expect": {
+        "merchantIdentifier": "merchant.sa.shop",
+        "countryCode": "SA",
+        "currencyCode": "SAR",
+        "supportedNetworks": [
+          "visa",
+          "masterCard"
+        ],
+        "merchantCapabilities": [
+          "threeDSecure"
+        ],
+        "summaryItems": [
+          {
+            "label": "Shop KSA",
+            "amount": "25.00",
+            "type": "final"
+          }
+        ]
+      }
+    },
+    {
+      "name": "blank names fall back to the app name",
+      "region": "az",
+      "config": {
+        "merchantIdentifier": "merchant.com.example.shop",
+        "merchantName": " "
+      },
+      "appName": "Example Shop",
+      "order": {
+        "orderId": "o1",
+        "amount": 1.02,
+        "currency": "AZN",
+        "description": "Order #42",
+        "merchantName": "",
+        "status": "CREATED",
+        "language": "AZ",
+        "paymentMethods": [
+          "APPLE_PAY"
+        ],
+        "googlePay": null,
+        "applePay": null
+      },
+      "expect": {
+        "merchantIdentifier": "merchant.com.example.shop",
+        "countryCode": "AZ",
+        "currencyCode": "AZN",
+        "supportedNetworks": [
+          "visa",
+          "masterCard"
+        ],
+        "merchantCapabilities": [
+          "threeDSecure"
+        ],
+        "summaryItems": [
+          {
+            "label": "Example Shop",
+            "amount": "1.02",
+            "type": "final"
+          }
+        ]
+      }
+    }
+  ],
+  "payRequests": [
+    {
+      "name": "POST pay with a Google Pay token",
+      "method": "POST",
+      "path": "/api/v3/client/orders/o1/pay",
+      "headers": {
+        "X-Public-Key": "pr_pk_live_TEST",
+        "X-Client-Secret": "pr_cs_TEST",
+        "X-Client-App-Id": "com.payriff.example.ios",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "requiredHeaders": [
+        "X-Idempotency-Key"
+      ],
+      "absentHeaders": [
+        "x-secret-key",
+        "Origin",
+        "X-Parent-Origin",
+        "Authorization"
+      ],
+      "walletToken": "{\"signature\":\"MEQCIFakeSignature\",\"intermediateSigningKey\":{\"signedKey\":\"{\\\"keyValue\\\":\\\"MFkwEwYH\\\",\\\"keyExpiration\\\":\\\"1700000000000\\\"}\",\"signatures\":[\"MEUCIFake\"]},\"protocolVersion\":\"ECv2\",\"signedMessage\":\"{\\\"encryptedMessage\\\":\\\"ZmFrZQ\\\",\\\"ephemeralPublicKey\\\":\\\"BOdo\\\",\\\"tag\\\":\\\"dGFn\\\"}\"}",
+      "body": {
+        "method": "GOOGLE_PAY",
+        "encryptedMessage": "{\"signature\":\"MEQCIFakeSignature\",\"intermediateSigningKey\":{\"signedKey\":\"{\\\"keyValue\\\":\\\"MFkwEwYH\\\",\\\"keyExpiration\\\":\\\"1700000000000\\\"}\",\"signatures\":[\"MEUCIFake\"]},\"protocolVersion\":\"ECv2\",\"signedMessage\":\"{\\\"encryptedMessage\\\":\\\"ZmFrZQ\\\",\\\"ephemeralPublicKey\\\":\\\"BOdo\\\",\\\"tag\\\":\\\"dGFn\\\"}\"}"
+      }
+    },
+    {
+      "name": "POST pay with Apple Pay paymentData",
+      "method": "POST",
+      "path": "/api/v3/client/orders/o1/pay",
+      "headers": {
+        "X-Public-Key": "pr_pk_live_TEST",
+        "X-Client-Secret": "pr_cs_TEST",
+        "X-Client-App-Id": "com.payriff.example.ios",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      "requiredHeaders": [
+        "X-Idempotency-Key"
+      ],
+      "absentHeaders": [
+        "x-secret-key",
+        "Origin",
+        "X-Parent-Origin",
+        "Authorization"
+      ],
+      "walletToken": "{\"version\":\"EC_v1\",\"data\":\"3+f4oOTwPa6f1UZ6tG\",\"signature\":\"MIAGCSqGSIb3DQEHAqCAMIACAQEx\",\"header\":{\"ephemeralPublicKey\":\"MFkwEwYHKoZIzj0CAQ\",\"publicKeyHash\":\"LbsUwAT6w1JV9tFXocU813TCHks+LSuFF0R/eBkrWnQ=\",\"transactionId\":\"aaf5b7\"}}",
+      "body": {
+        "method": "APPLE_PAY",
+        "encryptedMessage": "{\"version\":\"EC_v1\",\"data\":\"3+f4oOTwPa6f1UZ6tG\",\"signature\":\"MIAGCSqGSIb3DQEHAqCAMIACAQEx\",\"header\":{\"ephemeralPublicKey\":\"MFkwEwYHKoZIzj0CAQ\",\"publicKeyHash\":\"LbsUwAT6w1JV9tFXocU813TCHks+LSuFF0R/eBkrWnQ=\",\"transactionId\":\"aaf5b7\"}}"
+      }
+    }
+  ],
+  "applePaySheet": {
+    "description": "How the SDK completes the Apple Pay sheet after didAuthorizePayment (§17.6). budgetSeconds counts from the authorization.",
+    "budgetSeconds": 20,
+    "cases": [
+      {
+        "situation": "final success status",
+        "outcome": "finalSuccess",
+        "sheet": "success",
+        "then": "returnResult"
+      },
+      {
+        "situation": "final declined status",
+        "outcome": "finalDeclined",
+        "sheet": "failure",
+        "then": "returnResult"
+      },
+      {
+        "situation": "final CANCELED or EXPIRED status",
+        "outcome": "finalCancelled",
+        "sheet": "failure",
+        "then": "returnResult"
+      },
+      {
+        "situation": "final status outside the groups (e.g. REFUNDED)",
+        "outcome": "finalUnexpected",
+        "sheet": "failure",
+        "then": "returnResult"
+      },
+      {
+        "situation": "failed(...) from /pay or the flow",
+        "outcome": "failed",
+        "sheet": "failure",
+        "then": "returnResult"
+      },
+      {
+        "situation": "device compromised before /pay",
+        "outcome": "deviceCompromised",
+        "sheet": "failure",
+        "then": "returnResult"
+      },
+      {
+        "situation": "nextAction challenge",
+        "outcome": "challenge",
+        "sheet": "success",
+        "then": "continueAfterSheet"
+      },
+      {
+        "situation": "nextAction redirect",
+        "outcome": "redirect",
+        "sheet": "success",
+        "then": "continueAfterSheet"
+      },
+      {
+        "situation": "no final status within budgetSeconds",
+        "outcome": "budgetExpired",
+        "sheet": "success",
+        "then": "continueAfterSheet"
+      }
+    ]
+  },
+  "buttonStyles": {
+    "defaultHeight": 44,
+    "defaultCornerRadius": 16,
+    "minHeight": 40,
+    "applePay": {
+      "defaults": {
+        "type": "plain",
+        "theme": "automatic"
+      },
+      "types": {
+        "plain": "plain",
+        "buy": "buy",
+        "checkout": "checkout",
+        "book": "book",
+        "donate": "donate",
+        "order": "order",
+        "subscribe": "subscribe"
+      },
+      "themes": {
+        "automatic": "automatic",
+        "black": "black",
+        "white": "white",
+        "whiteOutline": "whiteOutline"
+      },
+      "flutterAutomatic": {
+        "light": "black",
+        "dark": "white"
+      },
+      "description": "types and themes map to PKPaymentButtonType and PKPaymentButtonStyle cases. Flutter resolves automatic from the theme brightness."
+    },
+    "googlePay": {
+      "defaults": {
+        "type": "plain",
+        "theme": "automatic"
+      },
+      "types": {
+        "plain": "PLAIN",
+        "buy": "BUY",
+        "pay": "PAY",
+        "checkout": "CHECKOUT",
+        "book": "BOOK",
+        "donate": "DONATE",
+        "order": "ORDER",
+        "subscribe": "SUBSCRIBE"
+      },
+      "themes": {
+        "dark": "DARK",
+        "light": "LIGHT"
+      },
+      "automatic": {
+        "light": "DARK",
+        "dark": "LIGHT"
+      },
+      "description": "types and themes map to ButtonConstants.ButtonType and ButtonConstants.ButtonTheme. automatic: a dark button on a light page, a light button on a dark page."
+    }
+  }
+}

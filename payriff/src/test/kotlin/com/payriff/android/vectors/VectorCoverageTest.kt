@@ -10,7 +10,8 @@ import java.io.File
  * Guards the "every case of every vector file" rule: a vector file or a top-level section that no test asserts
  * fails here, so a new spec revision cannot be synced in silently.
  *
- * The card vectors (`card_*.json`, CONTRACT §16) are asserted by the `card` test package. Revision 5 archived the
+ * The card vectors (`card_*.json`, CONTRACT §16) are asserted by the `card` test package, and the Android sections of
+ * `wallet.json` (CONTRACT §17) by the `wallet` test package. Revision 5 archived the
  * hosted-flow vectors (`api.json`, `navigation.json`, `payment_url_order_id.json`, `amount.json`); they are no longer
  * synced, and this test fails if one comes back.
  */
@@ -79,6 +80,20 @@ class VectorCoverageTest {
                 "currentChain" to "CertificatePinningTest.theCurrentChainPassesAndTheInterceptedChainIsRefused",
                 "gccpayChain" to "CertificatePinningTest.theGccpayChainPasses",
                 "interceptedChain" to "CertificatePinningTest.theCurrentChainPassesAndTheInterceptedChainIsRefused",
+            ),
+            "wallet.json" to mapOf(
+                "description" to "-",
+                "googlePayMerchantIds" to "GooglePayVectorsTest.googlePayMerchantIdsAreTrimmedAndBlankIsNull",
+                "availability" to "GooglePayVectorsTest.availabilityGooglePayColumn (the Google Pay column)",
+                "amounts" to "GooglePayVectorsTest.amountsHaveTwoDecimalsFromDecimalArithmetic",
+                "googlePayEnvironments" to "GooglePayVectorsTest.googlePayEnvironmentFollowsTheApiHost",
+                "googlePayRequests" to "GooglePayVectorsTest.googlePayRequestsAreTheVectorsJson",
+                "payRequests" to "GooglePayVectorsTest.googlePayPayRequest (the Google Pay case)",
+                "buttonStyles" to "GooglePayVectorsTest.googlePayButtonStyles (shared sizes and googlePay)",
+                // Native Android has no Apple Pay (CONTRACT §17.2): these are asserted by the iOS SDK.
+                "applePayMerchantIdentifiers" to "- (iOS)",
+                "applePayRequests" to "- (iOS)",
+                "applePaySheet" to "- (iOS)",
             ),
             "card_validation.json" to mapOf(
                 "description" to "-",

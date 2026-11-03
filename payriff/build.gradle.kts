@@ -93,6 +93,12 @@ dependencies {
     api(libs.androidx.activity)
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
+    // Google Pay (CONTRACT §17.5): PaymentsClient, the official PayButton and TaskResultContracts.GetPaymentDataResult.
+    // No Play services type is part of the SDK's public API.
+    implementation(libs.play.services.wallet)
+    // Raises the androidx.fragment 1.0.0 of play-services-wallet: older FragmentActivity versions refuse the Activity
+    // Result API's request codes (lint InvalidFragmentVersionForActivityResult).
+    implementation(libs.androidx.fragment)
 
     testImplementation(libs.junit)
     testImplementation(libs.org.json)

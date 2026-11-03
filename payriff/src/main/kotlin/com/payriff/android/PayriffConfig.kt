@@ -37,6 +37,10 @@ import com.payriff.android.internal.card.ClientApiHosts
  *   [PayriffErrorCode.DEVICE_COMPROMISED]. Only a debuggable app (`ApplicationInfo.FLAG_DEBUGGABLE`) may opt out:
  *   release builds ignore it, with a warning, and refuse such devices, so leaving it on cannot reach production.
  *   Defaults to `false`.
+ * @property googlePay Google Pay in [PayriffPaymentView] and [PayriffGooglePayButton] (CONTRACT §17): your
+ *   [PayriffGooglePayConfig]. `null` (the default): Google Pay is never offered. It is offered for an order that lists
+ *   `GOOGLE_PAY` with its gateway, on a device that is not compromised and can pay with Google Pay. The Google Pay
+ *   environment is `TEST` with the sandbox host (`https://sb-api.payriff.com`) and `PRODUCTION` otherwise.
  */
 public class PayriffConfig(
     publishableKey: String? = null,
@@ -46,6 +50,7 @@ public class PayriffConfig(
     public val enableLogging: Boolean = false,
     public val allowScreenCaptureInDebug: Boolean = false,
     public val allowCompromisedDevices: Boolean = false,
+    public val googlePay: PayriffGooglePayConfig? = null,
 ) {
     /**
      * Publishable key (`pr_pk_live_…`) of the card flow ([PayriffCardForm], [PayriffCardPaymentLauncher],
@@ -76,12 +81,16 @@ public class PayriffConfig(
         .enableLogging(enableLogging)
         .allowScreenCaptureInDebug(allowScreenCaptureInDebug)
         .allowCompromisedDevices(allowCompromisedDevices)
+        .googlePay(googlePay)
 
-    /** Describes the configuration with the publishable key redacted as `pr_pk_live_***(<length>)`, so it is safe to log. */
+    /**
+     * Describes the configuration with the publishable key redacted as `pr_pk_live_***(<length>)`, so it is safe to log.
+     * Google Pay shows as `googlePay=on` or `googlePay=off` (CONTRACT §17.2).
+     */
     override fun toString(): String =
         "PayriffConfig(publishableKey=${publishableKey?.let(::redactPublishableKey)}, environment=$environment, " +
             "region=$region, language=$language, enableLogging=$enableLogging, allowScreenCaptureInDebug=$allowScreenCaptureInDebug, " +
-            "allowCompromisedDevices=$allowCompromisedDevices)"
+            "allowCompromisedDevices=$allowCompromisedDevices, googlePay=${if (googlePay != null) "on" else "off"})"
 
     /** Java-friendly builder for [PayriffConfig]. Every setter mirrors the constructor parameter of the same name. */
     public class Builder {
@@ -92,6 +101,7 @@ public class PayriffConfig(
         private var enableLogging: Boolean = false
         private var allowScreenCaptureInDebug: Boolean = false
         private var allowCompromisedDevices: Boolean = false
+        private var googlePay: PayriffGooglePayConfig? = null
 
         /** Sets [PayriffConfig.publishableKey]. */
         public fun publishableKey(value: String?): Builder = apply { publishableKey = value }
@@ -114,6 +124,9 @@ public class PayriffConfig(
         /** Sets [PayriffConfig.allowCompromisedDevices]. Debug builds only. */
         public fun allowCompromisedDevices(value: Boolean): Builder = apply { allowCompromisedDevices = value }
 
+        /** Sets [PayriffConfig.googlePay]; `null` turns Google Pay off. */
+        public fun googlePay(value: PayriffGooglePayConfig?): Builder = apply { googlePay = value }
+
         /** Creates the configuration. Never throws; see [PayriffConfig] for validation. */
         public fun build(): PayriffConfig = PayriffConfig(
             publishableKey = publishableKey,
@@ -123,6 +136,7 @@ public class PayriffConfig(
             enableLogging = enableLogging,
             allowScreenCaptureInDebug = allowScreenCaptureInDebug,
             allowCompromisedDevices = allowCompromisedDevices,
+            googlePay = googlePay,
         )
     }
 

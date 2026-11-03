@@ -5,8 +5,9 @@ import com.payriff.android.internal.ResultJson
 /** Why a payment ended as [PayriffResult.Cancelled]. */
 public enum class PayriffCancelReason {
     /**
-     * The customer closed the payment before anything was paid. Part of the result shape shared by every Payriff SDK;
-     * the card flow does not return it, because closing the 3-D Secure sheet after the card was sent checks the status
+     * The customer closed the payment before anything was paid: [PayriffGooglePayButton] returns it when the Google Pay
+     * sheet is closed without paying, with the order's id and status [PayriffPaymentStatus.UNKNOWN] (CONTRACT §17.8).
+     * The card flow does not return it, because closing the 3-D Secure sheet after the card was sent checks the status
      * and ends as [PayriffResult.Pending] unless the status is final.
      */
     USER_CLOSED,
@@ -37,7 +38,8 @@ public enum class PayriffPendingReason {
 }
 
 /**
- * Outcome of a card payment ([PayriffCardPaymentLauncher.confirm]). Exactly one result is delivered per confirm.
+ * Outcome of a card payment ([PayriffCardPaymentLauncher.confirm]) or a Google Pay payment ([PayriffPaymentView],
+ * [PayriffGooglePayButton]). Exactly one result is delivered per payment.
  *
  * Treat **only [Success] as paid**. [Pending] means "verify on your backend". Payment outcomes are
  * returned, never thrown.

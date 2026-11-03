@@ -17,7 +17,7 @@ public enum class PayriffErrorCode {
      */
     INVALID_ORDER,
 
-    /** Another card payment of this SDK is running ([Payriff.isPaymentInProgress]). */
+    /** Another card or Google Pay payment of this SDK is running ([Payriff.isPaymentInProgress]). */
     PAYMENT_IN_PROGRESS,
 
     /** The 3-D Secure sheet could not be shown, for example because Android System WebView is missing. */
@@ -81,6 +81,13 @@ public enum class PayriffErrorCode {
      * can allow it anyway with [PayriffConfig.allowCompromisedDevices]; release builds ignore that flag.
      */
     DEVICE_COMPROMISED,
+
+    /**
+     * Google Pay did not return a payment (CONTRACT §17.11): the Google Pay sheet reported an error (the message names
+     * its status code, for example `Google Pay failed (status 10).`), returned no payment token, or could not be shown.
+     * Nothing was sent to Payriff. Not retryable and not fatal: the order may still be paid by card.
+     */
+    WALLET_FAILED,
 }
 
 /** A field of [PayriffCardForm]. */

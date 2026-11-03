@@ -11,16 +11,26 @@ import java.math.RoundingMode
 import java.util.WeakHashMap
 
 /**
- * What [com.payriff.android.PayriffPaymentView] shows, top to bottom, and its copy (CONTRACT §16.14). Pure Kotlin, so
- * the JVM unit tests check the structure the view is built from.
+ * What [com.payriff.android.PayriffPaymentView] shows, top to bottom, and its copy (CONTRACT §16.14, §17.9). Pure
+ * Kotlin, so the JVM unit tests check the structure the view is built from.
  */
 internal object PaymentViewPlan {
 
     /** A part of the view. */
-    enum class Part { FORM, PAY_BUTTON, ERROR, BADGES, SECURE_NOTE, POWERED_BY }
+    enum class Part { WALLET_BUTTON, WALLET_DIVIDER, FORM, PAY_BUTTON, ERROR, BADGES, SECURE_NOTE, POWERED_BY }
 
     /** A part and the space above it, in dp. */
     data class Item(val part: Part, val gapAboveDp: Int)
+
+    /** The wallet divider, 16 below the wallet button (CONTRACT §17.9). */
+    const val WALLET_DIVIDER_GAP_DP = 16
+
+    /** The card form, 16 below the wallet divider, or below the wallet button when the style hides the divider. */
+    const val WALLET_FORM_GAP_DP = 16
+
+    /** Between the divider's text and each of its lines, and the lines' thickness. */
+    const val WALLET_DIVIDER_TEXT_GAP_DP = 12
+    const val WALLET_DIVIDER_LINE_DP = 1
 
     /** The Pay button, 24 below the form. */
     const val BUTTON_GAP_DP = 24
@@ -73,12 +83,17 @@ internal object PaymentViewPlan {
     const val WORDMARK = "Payriff"
 
     /**
-     * The content top to bottom with the space above each part: the form, the Pay button, the error line (only while
-     * there is one), the badges and the secure line, unless the style hides them. The footer is laid out apart from
-     * it ([footer]).
+     * The content top to bottom with the space above each part: the wallet button and its divider (only while a wallet
+     * is offered, [showsWallet]; the divider unless the style hides it), the form, the Pay button, the error line (only
+     * while there is one), the badges and the secure line, unless the style hides them. Without a wallet the layout is
+     * exactly CONTRACT §16.14. The footer is laid out apart from it ([footer]).
      */
-    fun content(style: PayriffPaymentViewStyle, showsError: Boolean): List<Item> = buildList {
-        add(Item(Part.FORM, 0))
+    fun content(style: PayriffPaymentViewStyle, showsError: Boolean, showsWallet: Boolean = false): List<Item> = buildList {
+        if (showsWallet) {
+            add(Item(Part.WALLET_BUTTON, 0))
+            if (style.showWalletDivider) add(Item(Part.WALLET_DIVIDER, WALLET_DIVIDER_GAP_DP))
+        }
+        add(Item(Part.FORM, if (showsWallet) WALLET_FORM_GAP_DP else 0))
         add(Item(Part.PAY_BUTTON, BUTTON_GAP_DP))
         if (showsError) add(Item(Part.ERROR, ERROR_GAP_DP))
         if (style.showBadges) add(Item(Part.BADGES, BADGES_GAP_DP))
@@ -108,6 +123,13 @@ internal object PaymentViewPlan {
      */
     fun secureText(language: PayriffLanguage, style: PayriffPaymentViewStyle): String =
         style.secureNoteText?.takeIf { it.isNotBlank() } ?: CardStrings.view(language, CardStrings.VIEW_SECURE)
+
+    /**
+     * The text of the wallet divider: the style's [PayriffPaymentViewStyle.walletDividerText], trimmed, or
+     * `view.orPayByCard` in [language] when it is `null` or blank (CONTRACT §17.9).
+     */
+    fun walletDividerText(language: PayriffLanguage, style: PayriffPaymentViewStyle): String =
+        style.walletDividerText?.trim()?.takeIf { it.isNotEmpty() } ?: CardStrings.view(language, CardStrings.VIEW_OR_PAY_BY_CARD)
 
     /** The Pay button's title style: [PayriffPaymentViewStyle.buttonTextStyle] merged over 16 sp semibold, white. */
     fun buttonText(style: PayriffPaymentViewStyle): ResolvedTextStyle = CardFormStyles.resolveText(
@@ -212,19 +234,24 @@ internal enum class PaymentViewAsset(
 }
 
 /**
- * The `ActivityResultRegistry` keys of the payment views' 3-D Secure launchers. A view's key comes from its id, so the
- * view with the same id in a recreated activity receives the result; two views attached to one registry at the same
- * time never share a key. Main thread only.
+ * The `ActivityResultRegistry` keys of the payment views' launchers (3-D Secure and Google Pay) and of the standalone
+ * Google Pay buttons. A view's key comes from its id, so the view with the same id in a recreated activity receives the
+ * result; two views attached to one registry at the same time never share a key. Main thread only.
  */
 internal object PaymentViewKeys {
 
-    private const val PREFIX = "com.payriff.android.PayriffPaymentView:"
+    /** The prefix of [com.payriff.android.PayriffPaymentView]'s keys. */
+    const val PAYMENT_VIEW = "com.payriff.android.PayriffPaymentView:"
+
+    /** The prefix of [com.payriff.android.PayriffGooglePayButton]'s keys. */
+    const val GOOGLE_PAY_BUTTON = "com.payriff.android.PayriffGooglePayButton:"
+
     private const val NO_ID = -1
 
     private val inUse = WeakHashMap<Any, MutableSet<String>>()
 
-    /** The key of the view with [viewId] (`View.NO_ID` without one). */
-    fun base(viewId: Int): String = PREFIX + if (viewId == NO_ID) "default" else viewId.toString()
+    /** The key of the view with [viewId] (`View.NO_ID` without one), with the [prefix] of its kind of view. */
+    fun base(viewId: Int, prefix: String = PAYMENT_VIEW): String = prefix + if (viewId == NO_ID) "default" else viewId.toString()
 
     /** Takes [base] in [registry], or `base#2`, `base#3` … while another attached view holds it. */
     fun acquire(registry: Any, base: String): String {

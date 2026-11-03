@@ -66,7 +66,7 @@ internal object PaymentGuard {
     }
 
     fun inProgressError(): PayriffError =
-        PayriffError(PayriffErrorCode.PAYMENT_IN_PROGRESS, "Another Payriff card payment is in progress.")
+        PayriffError(PayriffErrorCode.PAYMENT_IN_PROGRESS, "Another Payriff payment is already running.")
 
     /** Whether a payment holds the guard: a confirm in progress, or a 3-D Secure sheet. */
     @Synchronized

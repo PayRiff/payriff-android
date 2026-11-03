@@ -47,11 +47,26 @@ class ExampleSettingsTest {
     }
 
     @Test
+    fun googlePayIsOnWhenTheSettingSaysSo() {
+        // CONTRACT §17.13: payriff.googlePay and payriff.googlePayMerchantId.
+        assertNull("off by default", ExampleSettings.config("pr_pk_live_TEST", "PRODUCTION", "AZ").googlePay)
+        assertNull(ExampleSettings.config("pr_pk_live_TEST", "PRODUCTION", "AZ", googlePay = false, googlePayMerchantId = "BCR2DN4T").googlePay)
+        val on = ExampleSettings.config("pr_pk_live_TEST", "PRODUCTION", "AZ", googlePay = true, googlePayMerchantId = " BCR2DN4TABCDEF ")
+        assertEquals("BCR2DN4TABCDEF", on.googlePay?.merchantId)
+        assertNull("the order's or the app's name", on.googlePay?.merchantName)
+        assertTrue(on.toString().endsWith("googlePay=on)"))
+        assertNull("blank: no merchant ID", ExampleSettings.config("", "PRODUCTION", "AZ", googlePay = true).googlePay?.merchantId)
+    }
+
+    @Test
     fun theBuildHoldsNoSecretKey() {
-        // Only the publishable key, the environment and the region come from local.properties; the order comes from
-        // your backend.
+        // Only the publishable key, the environment, the region and the Google Pay settings come from local.properties;
+        // the order comes from your backend.
         val fields = BuildConfig::class.java.declaredFields.map { it.name }.filter { it.startsWith("PAYRIFF_") }
-        assertEquals(listOf("PAYRIFF_ENVIRONMENT", "PAYRIFF_PUBLISHABLE_KEY", "PAYRIFF_REGION"), fields.sorted())
+        assertEquals(
+            listOf("PAYRIFF_ENVIRONMENT", "PAYRIFF_GOOGLE_PAY", "PAYRIFF_GOOGLE_PAY_MERCHANT_ID", "PAYRIFF_PUBLISHABLE_KEY", "PAYRIFF_REGION"),
+            fields.sorted(),
+        )
         assertTrue(BuildConfig::class.java.declaredFields.none { "SECRET" in it.name.uppercase() })
     }
 }

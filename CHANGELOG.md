@@ -1,3 +1,49 @@
+## [1.0.0-rc.3] - 2026-11-03
+
+Google Pay (CONTRACT revision 7, §17).
+
+### Added
+
+- Google Pay in `PayriffPaymentView` (CONTRACT §17.9): with `PayriffConfig.googlePay` set, Google's official Pay button
+  appears above the card form, then "Or pay by card" (`view.orPayByCard`) between two lines, once Google Pay is offered:
+  the order is `CREATED` or `PENDING`, lists `GOOGLE_PAY` and has a Google Pay gateway, the device is not compromised,
+  and Google Pay's `isReadyToPay` is true. Without it the layout is the card screen as before. The token goes to the
+  Client API `/pay` with `method` `GOOGLE_PAY` (no `x-secret-key`, a new idempotency key per token, the card flow's
+  retries), then the card flow's 3-D Secure sheet and status polling run; the result goes to `onResultListener`.
+  Closing the Google Pay sheet reports nothing. While any payment runs, the form is locked, Pay shows its spinner and
+  the Google Pay button is dimmed.
+- `PayriffGooglePayConfig(merchantId, merchantName)` and `PayriffConfig.googlePay` (with a Java builder setter).
+  `PayriffConfig.toString()` shows `googlePay=on` or `googlePay=off`. The Google Pay environment is `TEST` with the
+  sandbox host and `PRODUCTION` otherwise.
+- `PayriffGooglePayButton`, a standalone Google Pay `View` (CONTRACT §17.10): `setOrder`, `style`,
+  `setOnAvailabilityChangeListener` and `setOnResultListener`. It shows nothing (zero size) while Google Pay is not
+  offered; closing the Google Pay sheet returns `Cancelled(USER_CLOSED)` with the order id and status `UNKNOWN`.
+- `PayriffGooglePayButtonStyle` with `PayriffGooglePayButtonType` (`PLAIN`, `BUY`, `PAY`, `CHECKOUT`, `BOOK`, `DONATE`,
+  `ORDER`, `SUBSCRIBE`), `PayriffGooglePayButtonTheme` (`AUTOMATIC`, `DARK`, `LIGHT`), `cornerRadius` and `height` (at
+  least 40 dp), and on `PayriffPaymentViewStyle`: `googlePayButton`, `walletDividerText` and `showWalletDivider`.
+- `PayriffClientOrder.applePay` (`PayriffClientOrder.ApplePay`) and `PayriffClientOrder.googlePay`
+  (`PayriffClientOrder.GooglePay`), read as the web SDK reads them.
+- `PayriffErrorCode.WALLET_FAILED`: Google Pay reported an error (`Google Pay failed (status <code>).`), returned no
+  token or could not be shown. Not retryable, not fatal.
+- Example app: `payriff.googlePay` and `payriff.googlePayMerchantId` in `local.properties`.
+
+### Changed
+
+- The SDK depends on `com.google.android.gms:play-services-wallet` 19.5.0+ (its one third-party dependency) and on
+  `androidx.fragment` 1.3.6, which replaces the `androidx.fragment` 1.0.0 that Google Play services brings: older
+  `FragmentActivity` versions refuse the Activity Result API's request codes. The SDK's manifest enables the Google Pay
+  API (`com.google.android.gms.wallet.api.enabled`); Google Play services' manifests add `ACCESS_NETWORK_STATE`, a
+  query for the Google Maps app, OpenGL ES 2.0 as a required feature and the optional `org.apache.http.legacy`
+  library.
+- `PayriffPaymentView` keeps the order whose Google Pay sheet is open in its saved state (an order id, never a token),
+  so a Google Pay result that arrives after the activity was recreated pays only that order.
+
+### Security
+
+- The Google Pay token and Google's `PaymentData` are never logged and never part of an error message or a
+  `toString`; the `/pay` body is zeroed after the request, and the HTTP details redact `encryptedMessage`. The device-integrity check runs when the
+  view or the button appears, on tap and right before the token is sent.
+
 ## [1.0.0-rc.2] - 2026-10-27
 
 Second release candidate of 1.0.0 (CONTRACT revision 6). The API can still change before 1.0.0.

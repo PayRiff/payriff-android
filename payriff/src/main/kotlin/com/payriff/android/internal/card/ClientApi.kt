@@ -124,10 +124,16 @@ internal class CardStatus(val rawStatus: String?, val amount: BigDecimal?, val c
     }
 }
 
-/** The Client API calls the card flow needs. Interface so flow tests can fake it. */
+/** The Client API calls the card and wallet flows need. Interface so flow tests can fake it. */
 internal interface CardApi {
     suspend fun order(orderId: String): PayriffClientOrder
     suspend fun pay(orderId: String, card: EncryptedCard, idempotencyKey: String): NextAction
+
+    /**
+     * `/pay` with a wallet token (CONTRACT §17.7): [method] is `GOOGLE_PAY` or `APPLE_PAY`, [token] is sent as the wallet
+     * returned it, without `x-secret-key`. [idempotencyKey] is new for every token.
+     */
+    suspend fun payWithWallet(orderId: String, method: String, token: String, idempotencyKey: String): NextAction
     suspend fun threeDs(orderId: String): NextAction
     suspend fun status(orderId: String): CardStatus
 }
@@ -136,11 +142,12 @@ internal interface CardApi {
  * The Client API over [HttpTransport] (CONTRACT §16.3). Every call throws [PayriffError] and is cancellable.
  *
  * - Headers on every request: `X-Public-Key`, `X-Client-Secret`, `X-Client-App-Id` (omitted when unknown) and
- *   `Accept`. `/pay` adds `Content-Type`, `x-secret-key` and `X-Idempotency-Key`. Never `Origin`, `X-Parent-Origin`
- *   or `Authorization`.
+ *   `Accept`. `/pay` adds `Content-Type`, `x-secret-key` (cards only, never for a wallet token) and
+ *   `X-Idempotency-Key`. Never `Origin`, `X-Parent-Origin` or `Authorization`.
  * - Timeouts: GET 15 s, POST 30 s.
  * - HTTP 429 is retried 3 times after 1 s, 2 s and 4 s; a `/pay` without any response is retried once after 1 s.
- *   Retries resend the identical request: the same bytes and the same idempotency key.
+ *   Retries resend the identical request: the same bytes (the same ciphertext or wallet token) and the same idempotency
+ *   key.
  * - Nothing secret is logged: the method, the path ([Urls.redact], so a long order id is shortened) and the HTTP
  *   status, and in debuggable apps every request and response with its secrets redacted ([HttpLog], CONTRACT §11).
  */
@@ -164,6 +171,16 @@ internal class CardApiClient(
         }
     }
 
+    override suspend fun payWithWallet(orderId: String, method: String, token: String, idempotencyKey: String): NextAction {
+        val body = walletPayBody(method, token)
+        try {
+            val payload = call("POST", orderPath(orderId) + "/pay", body, PayHeaders(wrappedKey = null, idempotencyKey = idempotencyKey))
+            return NextAction.parse(payload)
+        } finally {
+            body.fill(0)
+        }
+    }
+
     override suspend fun threeDs(orderId: String): NextAction = NextAction.parse(call("GET", orderPath(orderId) + "/three-ds", null, null))
 
     override suspend fun status(orderId: String): CardStatus {
@@ -171,7 +188,8 @@ internal class CardApiClient(
         return CardStatus(payload.opt("status") as? String, decimal(payload.opt("amount")), payload.opt("currency") as? String)
     }
 
-    private class PayHeaders(val wrappedKey: String, val idempotencyKey: String)
+    /** The `/pay` headers: the card's `x-secret-key` ([wrappedKey], `null` for a wallet token) and the idempotency key. */
+    private class PayHeaders(val wrappedKey: String?, val idempotencyKey: String)
 
     private suspend fun call(method: String, path: String, body: ByteArray?, pay: PayHeaders?): JSONObject {
         val headers = LinkedHashMap<String, String>()
@@ -181,7 +199,7 @@ internal class CardApiClient(
         headers["Accept"] = JSON
         if (pay != null) {
             headers["Content-Type"] = JSON
-            headers["x-secret-key"] = pay.wrappedKey
+            pay.wrappedKey?.let { headers["x-secret-key"] = it }
             headers["X-Idempotency-Key"] = pay.idempotencyKey
         }
         val timeout = if (method == "POST") POST_TIMEOUT_MILLIS else GET_TIMEOUT_MILLIS
@@ -251,6 +269,10 @@ internal class CardApiClient(
         private val SUCCESS_RANGE = 200..299
         private const val JSON = "application/json"
         private const val ORDERS_PATH = "/api/v3/client/orders/"
+        private const val FIRST_PRINTABLE = 0x20
+
+        /** The characters of a wallet `/pay` body around the token. */
+        private const val WALLET_BODY_EXTRA_CHARS = 64
 
         /** `/api/v3/client/orders/{orderId}`: the id trimmed and percent-encoded as one segment (CONTRACT §6, §16.3). */
         fun orderPath(orderId: String): String = ORDERS_PATH + Urls.encodePathSegment(CardSetup.orderId(orderId))
@@ -264,6 +286,34 @@ internal class CardApiClient(
             System.arraycopy(card.encryptedMessage, 0, out, head.size, card.encryptedMessage.size)
             System.arraycopy(tail, 0, out, head.size + card.encryptedMessage.size, tail.size)
             return out
+        }
+
+        /**
+         * `{"method":"<method>","encryptedMessage":"<token>"}` as UTF-8 bytes (CONTRACT §17.7): the wallet token exactly
+         * as the wallet returned it, as a JSON string. Only `"`, `\` and control characters are escaped, so the
+         * server reads back the same text; `/` and non-ASCII characters stay as they are.
+         */
+        fun walletPayBody(method: String, token: String): ByteArray {
+            val json = StringBuilder(token.length + WALLET_BODY_EXTRA_CHARS)
+            json.append("{\"method\":")
+            appendJsonString(json, method)
+            json.append(",\"encryptedMessage\":")
+            appendJsonString(json, token)
+            json.append('}')
+            return json.toString().toByteArray(Charsets.UTF_8)
+        }
+
+        private fun appendJsonString(out: StringBuilder, value: String) {
+            out.append('"')
+            for (c in value) {
+                when {
+                    c == '"' -> out.append("\\\"")
+                    c == '\\' -> out.append("\\\\")
+                    c.code < FIRST_PRINTABLE -> out.append("\\u").append(String.format(Locale.ROOT, "%04x", c.code))
+                    else -> out.append(c)
+                }
+            }
+            out.append('"')
         }
 
         fun parseOrder(payload: JSONObject, requestedOrderId: String): PayriffClientOrder {
@@ -281,6 +331,11 @@ internal class CardApiClient(
                     PayriffLanguage.entries.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }
                 },
                 paymentMethods = if (methods == null) emptyList() else (0 until methods.length()).mapNotNull { methods.opt(it) as? String },
+                // As the web SDK: an object only, its values as they are (CONTRACT §17.3).
+                applePay = (payload.opt("applePay") as? JSONObject)?.let { PayriffClientOrder.ApplePay(it.opt("merchantIdentifier") as? String) },
+                googlePay = (payload.opt("googlePay") as? JSONObject)?.let {
+                    PayriffClientOrder.GooglePay(it.opt("gateway") as? String, it.opt("gatewayMerchantId") as? String)
+                },
             )
         }
 
