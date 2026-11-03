@@ -29,7 +29,8 @@ import androidx.annotation.ColorInt
  * @property buttonCornerRadius Corner radius of the Pay button in dp. Defaults to 16.
  * @property payButtonLabel The word of the Pay button, in place of "Pay" in the view's language; it is shown as it is in
  *   every language. The amount and the currency still follow it ("Pay now 1.02 AZN"), and it shows alone while the
- *   amount is unknown. `null` (the default) or a blank text keeps "Pay", "Ödə" or "Оплатить".
+ *   amount is unknown. `null` (the default) or a blank text keeps "Pay", "Ödə" or "Оплатить" ([PayriffStrings.pay] when
+ *   set). [payButtonTitle] wins over it.
  * @property secondaryTextColor The secure line and "Powered by"; `null` is `#76787F`.
  * @property showBadges Shows the Mastercard and Visa badges below the button. Defaults to `true`.
  * @property showSecureNote Shows the lock and "Proceed securely by PCI DSS". Defaults to `true`.
@@ -48,6 +49,21 @@ import androidx.annotation.ColorInt
  *   card" in the view's language, trimmed. `null` (the default) or a blank text keeps the localized text.
  * @property showWalletDivider Shows the divider ("Or pay by card" between two lines) under the wallet button. Defaults to
  *   `true`. Without a wallet button there is never a divider.
+ * @property payButtonTitle The Pay button's whole text in every state, trimmed, for example "Pay €12": no amount or
+ *   currency is added, even while the amount is unknown, and the spinner still replaces it while paying. It wins over
+ *   [payButtonLabel] and [PayriffStrings.pay]. `null` (the default) or a blank text keeps the word and the amount.
+ *   Google Pay's sheet and the bank's 3-D Secure page still show the order's real amount; showing the customer what is
+ *   really charged is then up to you.
+ * @property cornerSmoothing Smooths the corners of the Pay button, the badges and, unless
+ *   [PayriffCardFormStyle.cornerSmoothing] is set, the form's outlines and brand mark box, from 0 (circular corners, the
+ *   default) to 1, as Figma's corner smoothing (CONTRACT §18.2). Values outside 0…1 are clamped. Google's Pay button
+ *   keeps its own shape.
+ * @property buttonDisabledColor The disabled Pay button's background. With it or [buttonDisabledTextColor] set, the
+ *   disabled button (also while paying) is drawn at full opacity in these colours, with [buttonColor] and the title's
+ *   colour for the one left out; with neither (the default) it is dimmed to 50%.
+ * @property buttonDisabledTextColor The disabled Pay button's title and spinner; see [buttonDisabledColor].
+ * @property badgeBorderColor The frames of the Mastercard and Visa badges; `null` is `#ECEEF0`. It also colours the
+ *   border of the brand mark box in the card number field, unless [PayriffCardFormStyle.brandMarkBorderColor] is set.
  */
 public data class PayriffPaymentViewStyle(
     @ColorInt public val backgroundColor: Int? = null,
@@ -66,6 +82,11 @@ public data class PayriffPaymentViewStyle(
     public val googlePayButton: PayriffGooglePayButtonStyle = PayriffGooglePayButtonStyle(),
     public val walletDividerText: String? = null,
     public val showWalletDivider: Boolean = true,
+    public val payButtonTitle: String? = null,
+    public val cornerSmoothing: Float = 0f,
+    @ColorInt public val buttonDisabledColor: Int? = null,
+    @ColorInt public val buttonDisabledTextColor: Int? = null,
+    @ColorInt public val badgeBorderColor: Int? = null,
 ) {
 
     /** Returns a [Builder] pre-filled with this style. */
@@ -124,6 +145,21 @@ public data class PayriffPaymentViewStyle(
 
         /** Sets [PayriffPaymentViewStyle.showWalletDivider]. */
         public fun showWalletDivider(value: Boolean): Builder = apply { style = style.copy(showWalletDivider = value) }
+
+        /** Sets [PayriffPaymentViewStyle.payButtonTitle]. */
+        public fun payButtonTitle(value: String?): Builder = apply { style = style.copy(payButtonTitle = value) }
+
+        /** Sets [PayriffPaymentViewStyle.cornerSmoothing], from 0 to 1. */
+        public fun cornerSmoothing(value: Float): Builder = apply { style = style.copy(cornerSmoothing = value) }
+
+        /** Sets [PayriffPaymentViewStyle.buttonDisabledColor]. */
+        public fun buttonDisabledColor(@ColorInt value: Int?): Builder = apply { style = style.copy(buttonDisabledColor = value) }
+
+        /** Sets [PayriffPaymentViewStyle.buttonDisabledTextColor]. */
+        public fun buttonDisabledTextColor(@ColorInt value: Int?): Builder = apply { style = style.copy(buttonDisabledTextColor = value) }
+
+        /** Sets [PayriffPaymentViewStyle.badgeBorderColor]. */
+        public fun badgeBorderColor(@ColorInt value: Int?): Builder = apply { style = style.copy(badgeBorderColor = value) }
 
         /** Creates the style. */
         public fun build(): PayriffPaymentViewStyle = style

@@ -318,7 +318,7 @@ class PayriffApiTest {
     /** The helper names shared by every Payriff SDK. */
     @Test
     fun helperNamesMatchTheContract() {
-        assertEquals("1.0.0-rc.3", Payriff.version)
+        assertEquals("1.0.0-rc.4", Payriff.version)
         assertEquals(Payriff.VERSION, Payriff.version)
 
         assertFalse(Payriff.isPaymentInProgress)

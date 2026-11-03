@@ -10,8 +10,9 @@ import java.io.File
  * Guards the "every case of every vector file" rule: a vector file or a top-level section that no test asserts
  * fails here, so a new spec revision cannot be synced in silently.
  *
- * The card vectors (`card_*.json`, CONTRACT §16) are asserted by the `card` test package, and the Android sections of
- * `wallet.json` (CONTRACT §17) by the `wallet` test package. Revision 5 archived the
+ * The card vectors (`card_*.json`, CONTRACT §16, §19) and `corner_smoothing.json` (§18.2) are asserted by the `card`
+ * test package, `strings_override.json` (§18.6) by this package, and the Android sections of `wallet.json`
+ * (CONTRACT §17) by the `wallet` test package. Revision 5 archived the
  * hosted-flow vectors (`api.json`, `navigation.json`, `payment_url_order_id.json`, `amount.json`); they are no longer
  * synced, and this test fails if one comes back.
  */
@@ -41,6 +42,18 @@ class VectorCoverageTest {
             "status.json" to cases("StatusVectorsTest.everyStatusCaseMatches"),
             "strings.json" to mapOf("description" to "-", "strings" to "SmallVectorsTest.stringTableMatchesStringsJson"),
             "card_3ds_navigation.json" to cases("CardNavigationVectorsTest.everyThreeDsNavigationStep"),
+            "corner_smoothing.json" to mapOf(
+                "description" to "-",
+                "algorithm" to "CornerSmoothingVectorsTest.everyCaseHasTheVectorsCornerAndTopRightPoints (the formulas)",
+                "cases" to "CornerSmoothingVectorsTest.everyCaseHasTheVectorsCornerAndTopRightPoints",
+            ),
+            "strings_override.json" to mapOf(
+                "description" to "-",
+                "fields" to "StringsOverrideVectorsTest.everyFieldReplacesItsKey",
+                "resolution" to "StringsOverrideVectorsTest.resolutionOrder",
+                "payButton" to "StringsOverrideVectorsTest.payButtonText",
+                "poweredBy" to "StringsOverrideVectorsTest.poweredBySplit",
+            ),
             "card_api.json" to mapOf(
                 "description" to "-",
                 "order" to "CardApiVectorsTest.order",
@@ -70,7 +83,13 @@ class VectorCoverageTest {
                 "cvv" to "CardValidationVectorsTest.formatVectors",
                 "holder" to "CardValidationVectorsTest.formatVectors",
             ),
-            "card_next_action.json" to cases("CardNavigationVectorsTest.everyNextActionCase"),
+            "card_next_action.json" to mapOf(
+                "description" to "-",
+                "cases" to "CardNavigationVectorsTest.everyNextActionCase",
+                "methodSteps" to "ThreeDsMethodStepTest.methodStepsStartTheVectorsWebViews",
+                "threeDsTiming" to "ThreeDsMethodStepTest.timingsAreTheVectors",
+                "afterMethod" to "ThreeDsMethodStepTest.afterTheMethodEveryResultGoesWhereTheVectorSays",
+            ),
             "card_strings.json" to mapOf("description" to "-", "messages" to "CardValidationVectorsTest.stringTableEqualsCardStringsJson"),
             "tls_pins.json" to mapOf(
                 "description" to "-",
@@ -94,6 +113,8 @@ class VectorCoverageTest {
                 "applePayMerchantIdentifiers" to "- (iOS)",
                 "applePayRequests" to "- (iOS)",
                 "applePaySheet" to "- (iOS)",
+                // CONTRACT §19.4: Apple Pay's networks; Google Pay keeps VISA and MASTERCARD (googlePayRequests).
+                "applePayNetworks" to "- (iOS)",
             ),
             "card_validation.json" to mapOf(
                 "description" to "-",
@@ -107,6 +128,7 @@ class VectorCoverageTest {
                 "holder" to "CardValidationVectorsTest.cvvAndHolder",
                 "visibleError" to "CardValidationVectorsTest.visibleError",
                 "luhn" to "CardValidationVectorsTest.luhn",
+                "madaBins" to "MadaTest.theBinsArePayriffJsList",
             ),
         )
 

@@ -54,7 +54,8 @@ class CardValidationVectorsTest {
             assertEquals("brand of '$input'", case.stringOrNull("brand"), brandName(result.brand))
             assertEquals("value of '$input'", case.getString("value"), result.value)
         }
-        assertEquals(26, cases.size)
+        // Revision 9 added the mada cases (CONTRACT §19.2).
+        assertEquals(33, cases.size)
     }
 
     @Test
@@ -65,7 +66,7 @@ class CardValidationVectorsTest {
             assertEquals("brand of '$digits'", case.stringOrNull("brand"), brandName(CardValidation.detectBrand(digits)))
             assertEquals("maxLength of '$digits'", case.getInt("maxLength"), CardValidation.maxPanLength(digits))
         }
-        assertEquals(16, cases.size)
+        assertEquals(34, cases.size)
     }
 
     @Test

@@ -1,5 +1,5 @@
 {
-  "description": "Card form copy in az/en/ru. Labels, the \"Card information\" group label and the placeholders follow Payriff's hosted payment page (pay.payriff.com, owner request 2026-10-21); the placeholders are the same in every language, as on that page. Field error messages come from the web SDK (fields/i18n.js). Use these exact strings. An errorCode with no specific message falls back to that field's \"invalid\" message. See CONTRACT.md §16.4-§16.5. view.* is the payment view copy (§16.14): pay is followed by the amount; poweredBy is split at \"Payriff\", which is replaced by the logo. view.orPayByCard is the wallet divider (§17.9).",
+  "description": "Card form copy in az/en/ru. Labels, the \"Card information\" group label and the placeholders follow Payriff's hosted payment page (pay.payriff.com, owner request 2026-10-21); the placeholders are the same in every language, as on that page. Field error messages come from the web SDK (fields/i18n.js). Use these exact strings. An errorCode with no specific message falls back to that field's \"invalid\" message. See CONTRACT.md §16.4-§16.5. view.* is the payment view copy (§16.14): pay is followed by the amount; poweredBy is split at \"Payriff\", which is replaced by the logo. view.orPayByCard is the wallet divider (§17.9). ar (revision 9): field errors, labels and the holder placeholder from Payriff.js 1.3.1; number, expiry and CVC placeholders stay Latin because those inputs are always left-to-right.",
   "messages": {
     "az": {
       "number": {
@@ -137,6 +137,52 @@
         "notPayable": "Этот заказ нельзя оплатить картой",
         "deviceNotSupported": "По соображениям безопасности оплата картой на этом устройстве недоступна",
         "orPayByCard": "Или оплатите картой"
+      }
+    },
+    "ar": {
+      "number": {
+        "required": "أدخل رقم البطاقة",
+        "incomplete": "رقم البطاقة غير مكتمل",
+        "invalid": "رقم البطاقة غير صحيح",
+        "unsupported": "نوع البطاقة هذا غير مدعوم"
+      },
+      "expiry": {
+        "required": "أدخل تاريخ الانتهاء",
+        "incomplete": "تاريخ الانتهاء غير مكتمل",
+        "invalid": "تاريخ الانتهاء غير صحيح",
+        "expired": "انتهت صلاحية هذه البطاقة"
+      },
+      "cvv": {
+        "required": "أدخل رمز التحقق (CVV)",
+        "incomplete": "رمز التحقق غير مكتمل",
+        "invalid": "رمز التحقق غير صحيح"
+      },
+      "holder": {
+        "required": "أدخل اسم حامل البطاقة",
+        "invalid": "اسم حامل البطاقة غير صحيح"
+      },
+      "placeholder": {
+        "number": "1234 1234 1234 1234",
+        "expiry": "MM / YY",
+        "cvv": "CVC",
+        "holder": "اسم حامل البطاقة"
+      },
+      "label": {
+        "number": "رقم البطاقة",
+        "expiry": "تاريخ الانتهاء",
+        "cvv": "رمز التحقق",
+        "holder": "اسم حامل البطاقة"
+      },
+      "group": {
+        "cardInformation": "معلومات البطاقة"
+      },
+      "view": {
+        "pay": "ادفع",
+        "secure": "دفع آمن وفق PCI DSS",
+        "poweredBy": "مدعوم من Payriff",
+        "notPayable": "لا يمكن دفع هذا الطلب بالبطاقة",
+        "deviceNotSupported": "الدفع بالبطاقة غير متاح على هذا الجهاز لأسباب أمنية",
+        "orPayByCard": "أو ادفع بالبطاقة"
       }
     }
   }

@@ -9,19 +9,38 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.view.View
 import android.view.animation.LinearInterpolator
 import com.payriff.android.PayriffCardBrand
+import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
-/** One command of absolute SVG path data (CONTRACT §16.4 uses `M`, `L`, `C` and `Z` only), in the path's own units. */
+/**
+ * One command of an absolute path, in the path's own units: SVG path data (CONTRACT §16.4 uses `M`, `L`, `C` and `Z`
+ * only), and the circular arcs of the smoothed corners ([Squircle], CONTRACT §18.2).
+ */
 internal sealed class PathCommand {
     class MoveTo(val x: Float, val y: Float) : PathCommand()
 
     class LineTo(val x: Float, val y: Float) : PathCommand()
 
     class CubicTo(val x1: Float, val y1: Float, val x2: Float, val y2: Float, val x: Float, val y: Float) : PathCommand()
+
+    /**
+     * A circular arc around ([centerX], [centerY]) with [radius], from [startAngle] over [sweepAngle], in degrees from
+     * the +x axis, clockwise on the screen (y down), as `android.graphics.Path.arcTo` takes them. Path data never has one.
+     */
+    class ArcTo(val centerX: Float, val centerY: Float, val radius: Float, val startAngle: Float, val sweepAngle: Float) : PathCommand() {
+        /** Where the arc ends. */
+        val endX: Float
+            get() = centerX + radius * cos(Math.toRadians((startAngle + sweepAngle).toDouble())).toFloat()
+
+        val endY: Float
+            get() = centerY + radius * sin(Math.toRadians((startAngle + sweepAngle).toDouble())).toFloat()
+    }
 
     object Close : PathCommand()
 }
@@ -55,28 +74,39 @@ internal object PathData {
         return commands
     }
 
-    /** Every point of [commands] (end points and control points), in order, as `x` to `y`. */
+    /** Every point of [commands] (end points and control points, and the end of an arc), in order, as `x` to `y`. */
     fun points(commands: List<PathCommand>): List<Pair<Float, Float>> = commands.flatMap { command ->
         when (command) {
             is PathCommand.MoveTo -> listOf(command.x to command.y)
             is PathCommand.LineTo -> listOf(command.x to command.y)
             is PathCommand.CubicTo -> listOf(command.x1 to command.y1, command.x2 to command.y2, command.x to command.y)
+            is PathCommand.ArcTo -> listOf(command.endX to command.endY)
             PathCommand.Close -> emptyList()
         }
     }
 
     /** Builds an [android.graphics.Path] from [commands]. */
-    fun toPath(commands: List<PathCommand>): Path {
-        val path = Path()
+    fun toPath(commands: List<PathCommand>): Path = Path().also { append(it, commands) }
+
+    /** Adds [commands] to [path]. */
+    fun append(path: Path, commands: List<PathCommand>) {
         for (command in commands) {
             when (command) {
                 is PathCommand.MoveTo -> path.moveTo(command.x, command.y)
                 is PathCommand.LineTo -> path.lineTo(command.x, command.y)
                 is PathCommand.CubicTo -> path.cubicTo(command.x1, command.y1, command.x2, command.y2, command.x, command.y)
+                is PathCommand.ArcTo -> path.arcTo(
+                    command.centerX - command.radius,
+                    command.centerY - command.radius,
+                    command.centerX + command.radius,
+                    command.centerY + command.radius,
+                    command.startAngle,
+                    command.sweepAngle,
+                    false,
+                )
                 PathCommand.Close -> path.close()
             }
         }
-        return path
     }
 
     /** Command letters become tokens of their own; numbers are split at white space and commas. */
@@ -137,11 +167,32 @@ internal object BrandMarks {
     const val MASTERCARD_RIGHT_CENTRE = 0.691f
 
     const val BADGE_FILL = 0xFFFFFFFF.toInt()
+
+    /** The badge's border unless the style sets one ([com.payriff.android.PayriffCardFormStyle.brandMarkBorderColor]). */
     const val BADGE_STROKE = 0xFFD1D1D6.toInt()
     const val VISA_BLUE = 0xFF1A1F71.toInt()
     const val MASTERCARD_RED = 0xFFEB001B.toInt()
     const val MASTERCARD_YELLOW = 0xFFF79E1B.toInt()
     const val MASTERCARD_ORANGE = 0xFFFF5F00.toInt()
+
+    /**
+     * mada (CONTRACT §19.2): Payriff.js's 32×20 drawing, without its frame, centred at 1:1 in the badge. Two bars, then
+     * the word in bold sans-serif centred at [MADA_TEXT_X] on the baseline [MADA_TEXT_BASELINE], all in the box's dp.
+     */
+    const val MADA_BOX_WIDTH = 32f
+    const val MADA_BOX_HEIGHT = 20f
+    const val MADA_BAR_LEFT = 3f
+    const val MADA_BAR_WIDTH = 5f
+    const val MADA_BAR_HEIGHT = 2.5f
+    const val MADA_BLUE_TOP = 7f
+    const val MADA_GREEN_TOP = 10.5f
+    const val MADA_BLUE = 0xFF259BD6.toInt()
+    const val MADA_GREEN = 0xFF84B740.toInt()
+    const val MADA_TEXT = "mada"
+    const val MADA_TEXT_SIZE = 8.5f
+    const val MADA_TEXT_X = 19.5f
+    const val MADA_TEXT_BASELINE = 13.5f
+    const val MADA_TEXT_COLOR = 0xFF1F2A44.toInt()
 
     /** The longest cross-fade between two marks (CONTRACT §16.4: at most 150 ms). */
     const val CROSS_FADE_MILLIS = 150L
@@ -150,6 +201,7 @@ internal object BrandMarks {
     fun label(brand: PayriffCardBrand?): String? = when (brand) {
         PayriffCardBrand.VISA -> "Visa"
         PayriffCardBrand.MASTERCARD -> "Mastercard"
+        PayriffCardBrand.MADA -> "mada"
         null -> null
     }
 
@@ -157,10 +209,11 @@ internal object BrandMarks {
 }
 
 /**
- * The brand inside the card number field (CONTRACT §16.4): the brand's mark on a 36×24 dp white badge with a
- * 1 dp `#D1D1D6` border and 4 dp corners (white in the dark theme too, as card marks are), or a neutral card outline
- * while the brand is unknown. A change cross-fades in 150 ms (instantly when animations are off), and accessibility
- * services read the mark as "Visa" or "Mastercard". Main thread only.
+ * The brand inside the card number field (CONTRACT §16.4, §19.2): the brand's mark on a 36×24 dp white badge with a
+ * 1 dp border ([borderColor], `#D1D1D6` by default) and 4 dp corners, smoothed by [smoothing] (CONTRACT §18.2; white in
+ * the dark theme too, as card marks are), or a neutral card outline while the brand is unknown. A change cross-fades in
+ * 150 ms (instantly when animations are off), and accessibility services read the mark as "Visa", "Mastercard" or
+ * "mada". Main thread only.
  */
 internal class BrandMarkView(context: Context) : View(context) {
 
@@ -177,6 +230,26 @@ internal class BrandMarkView(context: Context) : View(context) {
             }
         }
 
+    /** Colour of the badge's border (CONTRACT §18.4). */
+    var borderColor: Int = BrandMarks.BADGE_STROKE
+        set(value) {
+            if (field != value) {
+                field = value
+                invalidate()
+            }
+        }
+
+    /** Corner smoothing of the badge, 0…1 (CONTRACT §18.2). */
+    var smoothing: Float = 0f
+        set(value) {
+            val clamped = Squircle.clamp(value)
+            if (field != clamped) {
+                field = clamped
+                updateBadgePaths()
+                invalidate()
+            }
+        }
+
     /** The mark that fades out while [brand] fades in, and how far the cross-fade is (1 = done). */
     private var previous: PayriffCardBrand? = null
     private var fraction = 1f
@@ -184,10 +257,20 @@ internal class BrandMarkView(context: Context) : View(context) {
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
+        color = BrandMarks.MADA_TEXT_COLOR
+    }
     private val badge = RectF()
-    private val border = RectF()
+    private val badgePath = Path()
+    private val borderPath = Path()
     private val card = RectF()
     private val stripe = RectF()
+    private val madaBlue = RectF()
+    private val madaGreen = RectF()
+    private var madaTextX = 0f
+    private var madaBaseline = 0f
     private val visaUnits = PathData.toPath(BrandMarks.visaCommands)
     private val visa = Path()
     private val leftCircle = Path()
@@ -255,8 +338,7 @@ internal class BrandMarkView(context: Context) : View(context) {
         badge.set(left, top, left + BrandMarks.BADGE_WIDTH * unit, top + BrandMarks.BADGE_HEIGHT * unit)
         badgeCorner = BrandMarks.BADGE_CORNER * unit
         // The 1 dp border lies inside the badge.
-        val half = BrandMarks.BADGE_BORDER * unit / 2
-        border.set(badge.left + half, badge.top + half, badge.right - half, badge.bottom - half)
+        updateBadgePaths()
 
         // Visa: the wordmark scaled to 26 dp wide, centred.
         val markWidth = BrandMarks.MARK_WIDTH * unit
@@ -286,6 +368,37 @@ internal class BrandMarkView(context: Context) : View(context) {
         cardCorner = BrandMarks.BADGE_CORNER * unit
         val stripeTop = card.top + (STRIPE_OFFSET - STRIPE_HEIGHT / 2) * unit
         stripe.set(card.left, stripeTop, card.right, stripeTop + STRIPE_HEIGHT * unit)
+
+        // mada: the 32×20 box centred in the badge, at 1:1.
+        val boxLeft = badge.centerX() - BrandMarks.MADA_BOX_WIDTH / 2 * unit
+        val boxTop = badge.centerY() - BrandMarks.MADA_BOX_HEIGHT / 2 * unit
+        fun bar(rect: RectF, top: Float) = rect.set(
+            boxLeft + BrandMarks.MADA_BAR_LEFT * unit,
+            boxTop + top * unit,
+            boxLeft + (BrandMarks.MADA_BAR_LEFT + BrandMarks.MADA_BAR_WIDTH) * unit,
+            boxTop + (top + BrandMarks.MADA_BAR_HEIGHT) * unit,
+        )
+        bar(madaBlue, BrandMarks.MADA_BLUE_TOP)
+        bar(madaGreen, BrandMarks.MADA_GREEN_TOP)
+        madaTextX = boxLeft + BrandMarks.MADA_TEXT_X * unit
+        madaBaseline = boxTop + BrandMarks.MADA_TEXT_BASELINE * unit
+        text.textSize = BrandMarks.MADA_TEXT_SIZE * unit
+    }
+
+    /** The badge's fill and its border inside it (CONTRACT §18.2), for the current size and [smoothing]. */
+    private fun updateBadgePaths() {
+        if (unit <= 0f) return
+        SquirclePaths.set(badgePath, badge.left, badge.top, badge.right, badge.bottom, badgeCorner, smoothing)
+        SquirclePaths.setBorder(
+            borderPath,
+            badge.left,
+            badge.top,
+            badge.right,
+            badge.bottom,
+            badgeCorner,
+            smoothing,
+            BrandMarks.BADGE_BORDER * unit,
+        )
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -315,6 +428,14 @@ internal class BrandMarkView(context: Context) : View(context) {
                 fill.color = BrandMarks.MASTERCARD_ORANGE
                 canvas.drawPath(overlap, fill)
             }
+            PayriffCardBrand.MADA -> {
+                drawBadge(canvas)
+                fill.color = BrandMarks.MADA_BLUE
+                canvas.drawRect(madaBlue, fill)
+                fill.color = BrandMarks.MADA_GREEN
+                canvas.drawRect(madaGreen, fill)
+                canvas.drawText(BrandMarks.MADA_TEXT, madaTextX, madaBaseline, text)
+            }
             null -> {
                 stroke.color = outlineColor
                 stroke.strokeWidth = OUTLINE_STROKE * unit
@@ -328,11 +449,10 @@ internal class BrandMarkView(context: Context) : View(context) {
 
     private fun drawBadge(canvas: Canvas) {
         fill.color = BrandMarks.BADGE_FILL
-        canvas.drawRoundRect(badge, badgeCorner, badgeCorner, fill)
-        stroke.color = BrandMarks.BADGE_STROKE
+        canvas.drawPath(badgePath, fill)
+        stroke.color = borderColor
         stroke.strokeWidth = BrandMarks.BADGE_BORDER * unit
-        val corner = badgeCorner - BrandMarks.BADGE_BORDER * unit / 2
-        canvas.drawRoundRect(border, corner, corner, stroke)
+        canvas.drawPath(borderPath, stroke)
     }
 
     private companion object {

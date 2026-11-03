@@ -29,7 +29,7 @@ import org.junit.Rule
 import org.junit.Test
 import java.math.BigDecimal
 
-/** The 3DS sheet's state machine (CONTRACT §16.7 step 4–5, §16.8) with a fake transport and virtual time. */
+/** The 3DS sheet's state machine (CONTRACT §16.7 step 4–5, §16.8, §19.1) with a fake transport and virtual time. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ThreeDsFlowTest {
 
@@ -123,14 +123,15 @@ class ThreeDsFlowTest {
     }
 
     @Test
-    fun methodThenThreeDsLoopUntilAChallenge() = runTest {
+    fun theMethodPagesLoadThenThreeDsIsAskedUntilAChallenge() = runTest {
+        // CONTRACT §19.1: both hidden WebViews start; /three-ds waits for their first pages; a wait is asked again 2 s later
+        // and a network error is retried once, 1 s later.
         val h = harness()
         h.transport.on(
             "GET",
             threeDsPath,
             http(200, ok("""{"nextAction":"WAIT"}""")),
             FakeTransport.Reply.NoResponse(),
-            http(200, ok("""{"nextAction":"THREE_DS","clientRequest":[]}""")),
             http(200, ok("""{"nextAction":"THREE_DS","accessUrl":"https://acs.bank.example/c","clientRequest":[{"key":"creq","value":"x"}]}""")),
         )
         h.flow.start(NextAction.Method("https://acs.bank.example/method", "eyJ0aHJlZURTU2VydmVyVHJhbnNJRCI6IjEifQ", "https://api.payriff.com/api/v3/gateway/atb/method"))
@@ -139,8 +140,14 @@ class ThreeDsFlowTest {
             h.ui.methods,
         )
         assertTrue(h.ui.closeButtonEnabled)
+        advanceTimeBy(3_000)
+        assertTrue("nothing is asked while the pages load", h.transport.requestsTo(threeDsPath).isEmpty())
+        h.flow.onMethodPageLoaded()
+        runCurrent()
+        assertTrue("one page is still loading", h.transport.requestsTo(threeDsPath).isEmpty())
+        h.flow.onMethodPageLoaded()
         advanceUntilIdle()
-        assertEquals(listOf(1_000L, 2_000L, 3_000L, 4_000L), h.transport.requestsTo(threeDsPath).map { it.time })
+        assertEquals(listOf(3_000L, 5_000L, 6_000L), h.transport.requestsTo(threeDsPath).map { it.time })
         assertEquals(listOf("https://acs.bank.example/c" to "creq=x"), h.ui.challenges)
         val destroyed = h.ui.events.indexOf("destroyHidden")
         assertTrue(destroyed in 0 until h.ui.events.indexOf("challenge"))
@@ -148,32 +155,34 @@ class ThreeDsFlowTest {
     }
 
     @Test
-    fun thirtyWaitsGoToStatusPolling() = runTest {
+    fun aWaitFromPayIsAskedEveryTwoSecondsForThirtySecondsThenTheStatusIsPolled() = runTest {
+        // CONTRACT §19.1: a wait from /pay is handled like a wait from /three-ds.
         val h = harness()
         h.transport.on("GET", threeDsPath, http(200, ok("""{"nextAction":"WAIT"}""")))
         h.transport.on("GET", statusPath, http(200, ok(statusPayload("APPROVED"))))
         h.flow.start(NextAction.Wait)
         assertTrue(h.ui.methods.isEmpty())
         advanceUntilIdle()
-        assertEquals(30, h.transport.requestsTo(threeDsPath).size)
+        assertEquals((1..15).map { it * 2_000L }, h.transport.requestsTo(threeDsPath).map { it.time })
         assertEquals(listOf(30_000L), h.transport.requestsTo(statusPath).map { it.time })
         assertTrue(h.ui.result is PayriffResult.Success)
     }
 
     @Test
-    fun aNewMethodStepRunsAndTheLoopGoesOn() = runTest {
+    fun aMethodStepAfterTheMethodGoesToStatusPolling() = runTest {
         val h = harness()
         h.transport.on(
             "GET",
             threeDsPath,
             http(200, ok("""{"nextAction":"THREE_DS","clientRequest":[{"key":"threeDSMethodUrlServer","value":"https://api.payriff.com/api/v3/gateway/atb/method2"}]}""")),
-            http(200, ok("""{"nextAction":"CHECK_STATUS"}""")),
         )
         h.transport.on("GET", statusPath, http(200, ok(statusPayload("APPROVED"))))
         h.flow.start(NextAction.Method(null, null, null))
-        assertTrue(h.ui.methods.isEmpty())
         advanceUntilIdle()
-        assertEquals(listOf(Triple<String?, String?, String?>(null, null, "https://api.payriff.com/api/v3/gateway/atb/method2")), h.ui.methods)
+        // CONTRACT §19.1: nothing to start, so /three-ds is asked at once; a second Method step is not run.
+        assertTrue(h.ui.methods.isEmpty())
+        assertEquals(listOf(0L), h.transport.requestsTo(threeDsPath).map { it.time })
+        assertEquals(listOf(0L), h.transport.requestsTo(statusPath).map { it.time })
         assertTrue(h.ui.result is PayriffResult.Success)
     }
 
@@ -272,14 +281,16 @@ class ThreeDsFlowTest {
     }
 
     @Test
-    fun aThreeDsErrorChecksTheStatusBeforeFailing() = runTest {
+    fun aThreeDsServerErrorIsRetriedOnceThenTheStatusDecides() = runTest {
         val h = harness()
         h.transport.on("GET", threeDsPath, http(500, """{"code":"15000","message":"Internal error"}"""))
-        h.transport.on("GET", statusPath, http(200, ok(statusPayload("PENDING"))))
+        h.transport.on("GET", statusPath, http(200, ok(statusPayload("APPROVED"))))
         h.flow.start(NextAction.Wait)
         advanceUntilIdle()
-        assertEquals(PayriffErrorCode.PAYMENT_FAILED, (h.ui.result as PayriffResult.Failed).error.code)
-        assertEquals(1, h.transport.requestsTo(statusPath).size)
+        // CONTRACT §19.1: an HTTP 5xx gets one retry, 1 s later; an error after it goes to status polling.
+        assertEquals(listOf(2_000L, 3_000L), h.transport.requestsTo(threeDsPath).map { it.time })
+        assertEquals(listOf(3_000L), h.transport.requestsTo(statusPath).map { it.time })
+        assertTrue(h.ui.result is PayriffResult.Success)
     }
 
     @Test

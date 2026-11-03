@@ -3,7 +3,7 @@
 Accept Payriff card payments in Android apps. Your server creates the order with its secret key and gives the app the order's `orderId` and `clientSecret`. The app shows `PayriffPaymentView`, a ready-made payment screen that pays the order with your **publishable key**, runs 3-D Secure in a native sheet and returns a typed `PayriffResult`. For a screen of your own, use the `PayriffCardForm` and `PayriffCardPaymentLauncher` it is built on.
 
 - A ready-made payment view for Views, Compose and Java. By default it looks like the card part of Payriff's hosted payment page (pay.payriff.com); you can change its colours, sizes, texts and parts
-- A native card form (Visa and Mastercard), validated and formatted as the customer types, in Azerbaijani, English and Russian, in the light and the dark theme
+- A native card form (Visa, Mastercard and mada), validated and formatted as the customer types, in Azerbaijani, English, Russian and Arabic (right-to-left), in the light and the dark theme
 - Google Pay in the payment view, or as a standalone button, with Google's official button and the same 3-D Secure and status checks as a card
 - Only the **publishable key** in the app: the secret key stays on your server
 - Card data is encrypted on the device (AES-256-GCM, key wrapped with RSA-OAEP SHA-256 and Payriff's pinned key) and leaves it only as ciphertext
@@ -23,6 +23,9 @@ Documentation of the Payriff API: <https://docs.payriff.com>
 - [The payment view](#the-payment-view)
   - [Full screen, bottom sheet or dialog](#full-screen-bottom-sheet-or-dialog)
   - [Customise the payment view](#customise-the-payment-view)
+  - [Match your design](#match-your-design)
+  - [Your own texts and right-to-left](#your-own-texts-and-right-to-left)
+  - [Payment view events](#payment-view-events)
 - [Google Pay](#google-pay)
 - [Build your own screen](#build-your-own-screen)
   - [The card form](#the-card-form)
@@ -68,11 +71,11 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-    implementation("com.payriff:payriff-android:1.0.0-rc.3")
+    implementation("com.payriff:payriff-android:1.0.0-rc.4")
 }
 ```
 
-`1.0.0-rc.3` is the release candidate of 1.0.0. The coordinates stay the same when the SDK also goes to Maven
+`1.0.0-rc.4` is the release candidate of 1.0.0. The coordinates stay the same when the SDK also goes to Maven
 Central; then the `maven(...)` line can go.
 
 The library manifest is merged into your app automatically. It adds the `INTERNET` permission, the 3-D Secure activity, a small start-up provider (see [Platform notes](#platform-notes)) and the Google Pay API's `com.google.android.gms.wallet.api.enabled` meta-data. Google Play services' own manifests, which come with `play-services-wallet`, add `ACCESS_NETWORK_STATE`, a query for the Google Maps app, OpenGL ES 2.0 as a required feature, the optional `org.apache.http.legacy` library and Google's `GoogleApiActivity` (not exported). No ProGuard/R8 rules are required.
@@ -187,7 +190,8 @@ paymentView.setOrder(orderId, clientSecret);
 | `publishableKey` | `String?` | `null` | Your publishable key (`pr_pk_live_…`), trimmed. Safe to ship in the app. Missing or not a publishable key: every card call fails with `INVALID_CONFIG`. |
 | `environment` | `PayriffEnvironment` | `PRODUCTION` | `PRODUCTION` or `SANDBOX`. With `region` it picks the API host; see [Regions](#regions). |
 | `region` | `PayriffRegion` | `AZ` | `AZ` (`api.payriff.com`) or `SA` (Saudi Arabia, GCC Pay, `api.gccpay.sa`). **`SA` has no sandbox**; see [Regions](#regions). |
-| `language` | `PayriffLanguage?` | `null` | Language of the form and the 3-D Secure sheet. `null` uses the device language: `az*` gives `AZ`, `ru*` gives `RU`, anything else `EN`. |
+| `language` | `PayriffLanguage?` | `null` | Language of the form and the 3-D Secure sheet: `AZ`, `EN`, `RU` or `AR`. `null` uses the device language: `az*` gives `AZ`, `en*` `EN`, `ru*` `RU`, `ar*` `AR`, and any other language `EN` (`AR` with `region = SA`). |
+| `strings` | `PayriffStrings?` | `null` | Your own texts for every screen of the SDK; see [Your own texts and right-to-left](#your-own-texts-and-right-to-left). Not part of `toString()`. |
 | `enableLogging` | `Boolean` | `false` | See [Logging](#logging) |
 | `allowScreenCaptureInDebug` | `Boolean` | `false` | Debug builds only: lets screenshots and screen recordings capture the form and the 3-D Secure sheet, for QA. Release builds ignore it; see [Platform notes](#platform-notes). |
 | `googlePay` | `PayriffGooglePayConfig?` | `null` | Google Pay in the payment view and the standalone button; `null` never offers it. See [Google Pay](#google-pay). `toString()` shows `googlePay=on` or `googlePay=off`. |
@@ -326,6 +330,62 @@ paymentView.style = PayriffPaymentViewStyle(
 
 Colours you set are used in both themes. A `PayriffTextStyle` is merged over the default: what you leave out keeps it, so `buttonTextStyle = PayriffTextStyle(color = …)` changes only the colour. The space between the parts is fixed, as on the hosted page: the button 24 dp below the form, the badges 24 dp below the button, the secure line 20 dp below the badges (24 dp below the button without them) and the footer at least 24 dp below the rest. Changing `style` keeps what the customer typed. From Java, use `new PayriffPaymentViewStyle.Builder()…build()`.
 
+### Match your design
+
+These options are off by default, so the view looks as above until you set one:
+
+```kotlin
+paymentView.style = PayriffPaymentViewStyle(
+    payButtonTitle = "Pay €12",                    // the whole text: no amount is added
+    cornerSmoothing = 0.6f,                        // 0 (circular corners) … 1, as Figma's corner smoothing
+    buttonDisabledColor = getColor(R.color.button_disabled),
+    buttonDisabledTextColor = getColor(R.color.button_disabled_text),
+    badgeBorderColor = getColor(R.color.hairline),
+    formStyle = PayriffCardFormStyle(brandMarkBorderColor = getColor(R.color.hairline)),
+)
+```
+
+| Property | Default |
+|---|---|
+| `payButtonTitle` | `null`. When set, it is the Pay button's whole text, trimmed, in every state: no amount or currency is added, even while the order loads, and the spinner still replaces it while paying. It wins over `payButtonLabel`. **The SDK charges the order's real amount**: Google Pay's sheet and the bank's 3-D Secure page show it, but on your button showing the customer what is really charged is up to you. |
+| `cornerSmoothing` | `0`: circular corners. From 0 to 1 it smooths the corners like Figma's corner smoothing: the Pay button, the badges, and the form's outlines and brand mark box unless `formStyle.cornerSmoothing` is set. Google's Pay button, the 3-D Secure sheet and system dialogs keep their own shape. |
+| `buttonDisabledColor`, `buttonDisabledTextColor` | `null`: a disabled Pay button is dimmed to 50%. With either set it is drawn at full opacity in these colours, using `buttonColor` or the title's colour for the one you leave out. |
+| `badgeBorderColor` | `#ECEEF0`: the frames of the Mastercard and Visa badges. In the view it also colours the brand mark box in the card number field, unless `formStyle.brandMarkBorderColor` is set. |
+
+### Your own texts and right-to-left
+
+`PayriffStrings` replaces any text the SDK shows: the form's labels, placeholders and errors, the Pay button's word, the secure line, the footer, the wallet divider, the error lines and the 3-D Secure sheet. Use it for a language the SDK does not have, or for your own wording. Every field is optional.
+
+```kotlin
+val strings = PayriffStrings(
+    pay = "Öde",                                   // "Öde 10.50 AZN"
+    numberInvalid = "Kart numarası geçersiz",
+    poweredBy = "Payriff ile güvenli ödeme",       // the logo replaces "Payriff"
+    errorMessages = mapOf(PayriffErrorCode.NETWORK_ERROR to "İnternet bağlantısı yok"),
+)
+Payriff.configure(PayriffConfig(publishableKey = "pr_pk_live_…", strings = strings)) // every screen
+paymentView.strings = strings.copy(sheetTitle = "Ödeme")                             // this view and its sheets
+```
+
+- Each text is the view's `strings`, then `PayriffConfig.strings`, then the built-in text in the effective language. A text is shown exactly as you give it; a blank one counts as not set. The style's own texts still win: `payButtonTitle` and `payButtonLabel` over `pay`, `secureNoteText` over `secureNote`, `walletDividerText` over `orPayByCard`, and the form style's `holderLabel` and `cardLabel` over `holderLabel` and `cardInformationLabel`.
+- `poweredBy`: the logo replaces its first "Payriff"; a text without "Payriff" is followed by the logo.
+- `errorMessages` sets the on-screen text of an error line per `PayriffErrorCode`, for example `SESSION_EXPIRED` under the Pay button or `NETWORK_ERROR` for a 3-D Secure page that does not load. `PayriffError.message` in results is unchanged: it stays an English text for developers.
+- **Right-to-left.** The form, the view and the 3-D Secure sheet follow the layout direction, and are right-to-left in Arabic too: the brand mark moves to the trailing side, expiry and CVC swap places, and labels and errors start at the right. The card number, expiry and CVC always read left-to-right. Android lays out right-to-left only in apps with `android:supportsRtl="true"` in their manifest.
+- From Java: `new PayriffStrings.Builder().pay("Öde").errorMessage(PayriffErrorCode.NETWORK_ERROR, "…").build()`.
+
+### Payment view events
+
+```kotlin
+paymentView.setOnPaymentStartedListener { method -> analytics.log("payment_started", method.name) } // CARD or GOOGLE_PAY
+paymentView.setOnOrderLoadedListener { order -> showTotal(order.amount, order.currency) }
+paymentView.setOnLoadFailedListener { error -> offerAnotherWayToPay(error) }
+```
+
+- `onPaymentStarted` runs once per attempt, before anything is sent: when Pay is tapped with a valid form, or when the Google Pay button is tapped, before its sheet opens.
+- `onOrderLoaded` runs after every successful load of the order, also when it cannot be paid by card.
+- `onLoadFailed` runs when the view gets no order: every failed load, and once per order with `DEVICE_COMPROMISED` on a compromised device. A fatal error still also goes to `onResultListener`, once.
+- They run on the main thread. Set them when you create the view, before `setOrder`.
+
 ## Google Pay
 
 `PayriffPaymentView` shows Google Pay above the card form, and `PayriffGooglePayButton` is a standalone Google Pay button for a screen of your own. Both use Google's official button and the Google Pay API (`play-services-wallet`), and pay through the same Client API as a card: the Google Pay token goes to `/pay` with `method` `GOOGLE_PAY`, then 3-D Secure, when the bank asks for it, and the status checks run as for a card. The result is the usual `PayriffResult`.
@@ -425,8 +485,8 @@ cardPayment.confirm(cardForm, orderId, clientSecret, result -> {
 
 `PayriffCardForm` is a plain `View` with the cardholder name, the card number, expiry (`MM / YY`) and CVV. By default it looks like the card form of Payriff's hosted payment page: the "Card holder" field first, then one "Card information" box with the card number on top and expiry | CVC below it, and one error line under each. `showHolder = false` hides the cardholder name. See [Customise the card form](#customise-the-card-form) to change its look.
 
-- **Validation** (the same rules as Payriff.js, the web SDK): Visa and Mastercard, at most 16 digits (typing stops there), the Luhn check, an expiry that is not in the past and at most 20 years ahead, a 3-digit CVV, and a cardholder name of at most 50 characters without control characters or `<` `>`. Errors appear at the right time: definite errors at once, "incomplete" after leaving the field, "required" after a payment attempt.
-- **Brand mark**: the number field shows the Visa or Mastercard mark as soon as the first digits identify the brand, and a neutral card outline before that.
+- **Validation** (the same rules as Payriff.js, the web SDK): Visa, Mastercard and mada, at most 16 digits (typing stops there), the Luhn check, an expiry that is not in the past and at most 20 years ahead, a 3-digit CVV, and a cardholder name of at most 50 characters without control characters or `<` `>`. Errors appear at the right time: definite errors at once, "incomplete" after leaving the field, "required" after a payment attempt.
+- **Brand mark**: the number field shows the Visa or Mastercard mark as soon as the first digits identify the brand, and a neutral card outline before that. mada, Saudi Arabia's debit network, is recognised once its whole 6- or 8-digit BIN is typed, so a card that is also Visa or Mastercard shows that mark first and then mada (`PayriffCardBrand.MADA` in `onChangeListener`).
 - **Cardholder name**: always upper case, with the locale-independent mapping (`i` → `I`), like the name printed on the card.
 - **Options**: `showHolder` (on by default, as on the hosted page; with `false` the field is hidden and the name is sent as `Unknown`, as on the web), `autoAdvance` (number → expiry → CVV, on by default), `language` and `style`. The default colours follow the system light or dark theme.
 - **Events**: `onChangeListener` receives `field`, `isValid`, `isEmpty`, `error`, `brand` and `isComplete`; never the typed values. `isComplete`, `clear()` and `focus(field)` are available too.
@@ -463,6 +523,8 @@ cardForm.style = PayriffCardFormStyle(
 | `borderWidth`, `cornerRadius` | 1 and 12 dp |
 | `holderHeight`, `rowHeight` | 46 and 40 dp, outline included; larger text makes them taller. The card box with its two rows is 79 dp tall. |
 | `horizontalPadding`, `labelSpacing`, `sectionSpacing` | 14, 10 and 16 dp |
+| `cornerSmoothing` | `null`: the payment view's `cornerSmoothing` inside it, else 0 (circular corners); up to 1 |
+| `brandMarkBorderColor` | `null`: the payment view's `badgeBorderColor` inside it when set, else `#D1D1D6` |
 
 `PayriffTextStyle` has `size` (sp), `weight`, `color` and `typeface`, all optional. It is merged over the default of the text it styles: what you leave out keeps the default, so `labelTextStyle = PayriffTextStyle(color = …)` keeps 14 sp semibold. From Java, pass `null` for what you leave out: `new PayriffTextStyle(null, null, color)`. A section's outline turns `errorColor` while it shows an error, and `focusedBorderColor` while one of its fields has the focus. Colours you set are used in both themes. Changing `style` keeps what the customer typed. From Java, use `new PayriffCardFormStyle.Builder()…build()`.
 
@@ -548,6 +610,7 @@ The result the SDK returns is for your app's UI only. It is worked out on the cu
 | SDK version | `Payriff.version` (also the constant `Payriff.VERSION`) |
 | A card or Google Pay payment is running | `Payriff.isPaymentInProgress` |
 | The device looks compromised | `Payriff.isDeviceCompromised(context)` |
+| The device can run the SDK's payments | `Payriff.isSupported`: always `true` on Android, because the SDK needs Android 7.0 (API 24) |
 | API base URL | `PayriffConfig.apiBaseUrl`, the host of its `region` and `environment`, for example `https://api.gccpay.sa` |
 | Status parser | `PayriffPaymentStatus.fromRaw(raw)` (aliases such as `PAID` give `APPROVED`) |
 | Result helpers | `result.isSuccess`, `result.payment`, `result.error` |

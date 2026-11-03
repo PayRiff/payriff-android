@@ -1,0 +1,806 @@
+{
+  "description": "Corner smoothing (CONTRACT §18.2): Figma's smoothing as in the MIT figma-squircle algorithm with preserveSmoothing false, one radius for all four corners. Inputs: width, height, radius and smoothing (clamped to 0..1). expect gives the effective radius and smoothing, the corner parameters and, for the top-right corner in screen coordinates (y down, angles in degrees from +x, clockwise), the start point, the first cubic (control 1, control 2, end), the arc (centre, radius, start and end angle) and the second cubic. The other corners are the same shape mirrored. Compare with a tolerance of 0.001.",
+  "algorithm": [
+    "budget = min(width, height) / 2; R = min(radius, budget); if R == 0 the corner is square",
+    "s = clamp(smoothing, 0, 1); p = (1 + s) * R; s = min(s, budget / R - 1); p = min(p, budget)",
+    "arcMeasure = 90 * (1 - s); arcSectionLength = sin(arcMeasure / 2) * R * sqrt(2)",
+    "alpha = (90 - arcMeasure) / 2; p3ToP4 = R * tan(alpha / 2); beta = 45 * s",
+    "c = p3ToP4 * cos(beta); d = c * tan(beta); b = (p - arcSectionLength - c - d) / 3; a = 2 * b",
+    "top-right corner from (width - p, 0): cubic by (a, 0) (a + b, 0) (a + b + c, d); arc of radius R by (arcSectionLength, arcSectionLength); cubic by (d, c) (d, b + c) (d, a + b + c), ending at (width, p)"
+  ],
+  "cases": [
+    {
+      "name": "plain rounded rectangle (smoothing 0)",
+      "width": 300,
+      "height": 48,
+      "radius": 12,
+      "smoothing": 0,
+      "expect": {
+        "radius": 12.0,
+        "smoothing": 0.0,
+        "p": 12.0,
+        "a": 0.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 0.0,
+        "arcSectionLength": 12.0,
+        "arcMeasure": 90.0,
+        "topRight": {
+          "start": [
+            288.0,
+            0.0
+          ],
+          "cubic1": [
+            [
+              288.0,
+              0.0
+            ],
+            [
+              288.0,
+              0.0
+            ],
+            [
+              288.0,
+              0.0
+            ]
+          ],
+          "arc": {
+            "center": [
+              288.0,
+              12.0
+            ],
+            "radius": 12.0,
+            "startAngle": -90.0,
+            "endAngle": 0.0
+          },
+          "cubic2": [
+            [
+              300.0,
+              12.0
+            ],
+            [
+              300.0,
+              12.0
+            ],
+            [
+              300.0,
+              12.0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "field, smoothing 0.6",
+      "width": 300,
+      "height": 48,
+      "radius": 12,
+      "smoothing": 0.6,
+      "expect": {
+        "radius": 12.0,
+        "smoothing": 0.6,
+        "p": 19.2,
+        "a": 6.7206,
+        "b": 3.3603,
+        "c": 2.5669,
+        "d": 1.3079,
+        "arcSectionLength": 5.2442,
+        "arcMeasure": 36.0,
+        "topRight": {
+          "start": [
+            280.8,
+            0.0
+          ],
+          "cubic1": [
+            [
+              287.5206,
+              0.0
+            ],
+            [
+              290.8809,
+              0.0
+            ],
+            [
+              293.4479,
+              1.3079
+            ]
+          ],
+          "arc": {
+            "center": [
+              288.0,
+              12.0
+            ],
+            "radius": 12.0,
+            "startAngle": -63.0,
+            "endAngle": -27.0
+          },
+          "cubic2": [
+            [
+              300.0,
+              9.1191
+            ],
+            [
+              300.0,
+              12.4794
+            ],
+            [
+              300.0,
+              19.2
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "field, smoothing 1",
+      "width": 300,
+      "height": 48,
+      "radius": 12,
+      "smoothing": 1,
+      "expect": {
+        "radius": 12.0,
+        "smoothing": 1.0,
+        "p": 24.0,
+        "a": 11.3137,
+        "b": 5.6569,
+        "c": 3.5147,
+        "d": 3.5147,
+        "arcSectionLength": 0.0,
+        "arcMeasure": 0.0,
+        "topRight": {
+          "start": [
+            276.0,
+            0.0
+          ],
+          "cubic1": [
+            [
+              287.3137,
+              0.0
+            ],
+            [
+              292.9706,
+              0.0
+            ],
+            [
+              296.4853,
+              3.5147
+            ]
+          ],
+          "arc": {
+            "center": [
+              288.0,
+              12.0
+            ],
+            "radius": 12.0,
+            "startAngle": -45.0,
+            "endAngle": -45.0
+          },
+          "cubic2": [
+            [
+              300.0,
+              7.0294
+            ],
+            [
+              300.0,
+              12.6863
+            ],
+            [
+              300.0,
+              24.0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "Pay button defaults, smoothing 0.6",
+      "width": 300,
+      "height": 44,
+      "radius": 16,
+      "smoothing": 0.6,
+      "expect": {
+        "radius": 16.0,
+        "smoothing": 0.375,
+        "p": 22.0,
+        "a": 5.5823,
+        "b": 2.7911,
+        "c": 2.2712,
+        "d": 0.689,
+        "arcSectionLength": 10.6665,
+        "arcMeasure": 56.25,
+        "topRight": {
+          "start": [
+            278.0,
+            0.0
+          ],
+          "cubic1": [
+            [
+              283.5823,
+              0.0
+            ],
+            [
+              286.3734,
+              0.0
+            ],
+            [
+              288.6446,
+              0.689
+            ]
+          ],
+          "arc": {
+            "center": [
+              284.0,
+              16.0
+            ],
+            "radius": 16.0,
+            "startAngle": -73.125,
+            "endAngle": -16.875
+          },
+          "cubic2": [
+            [
+              300.0,
+              13.6266
+            ],
+            [
+              300.0,
+              16.4177
+            ],
+            [
+              300.0,
+              22.0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "LimitSim button 52 / 14, smoothing 0.6",
+      "width": 300,
+      "height": 52,
+      "radius": 14,
+      "smoothing": 0.6,
+      "expect": {
+        "radius": 14.0,
+        "smoothing": 0.6,
+        "p": 22.4,
+        "a": 7.8407,
+        "b": 3.9204,
+        "c": 2.9948,
+        "d": 1.5259,
+        "arcSectionLength": 6.1182,
+        "arcMeasure": 36.0,
+        "topRight": {
+          "start": [
+            277.6,
+            0.0
+          ],
+          "cubic1": [
+            [
+              285.4407,
+              0.0
+            ],
+            [
+              289.3611,
+              0.0
+            ],
+            [
+              292.3559,
+              1.5259
+            ]
+          ],
+          "arc": {
+            "center": [
+              286.0,
+              14.0
+            ],
+            "radius": 14.0,
+            "startAngle": -63.0,
+            "endAngle": -27.0
+          },
+          "cubic2": [
+            [
+              300.0,
+              10.6389
+            ],
+            [
+              300.0,
+              14.5593
+            ],
+            [
+              300.0,
+              22.4
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "badge 42x28 r4, smoothing 0.6",
+      "width": 42,
+      "height": 28,
+      "radius": 4,
+      "smoothing": 0.6,
+      "expect": {
+        "radius": 4.0,
+        "smoothing": 0.6,
+        "p": 6.4,
+        "a": 2.2402,
+        "b": 1.1201,
+        "c": 0.8556,
+        "d": 0.436,
+        "arcSectionLength": 1.7481,
+        "arcMeasure": 36.0,
+        "topRight": {
+          "start": [
+            35.6,
+            0.0
+          ],
+          "cubic1": [
+            [
+              37.8402,
+              0.0
+            ],
+            [
+              38.9603,
+              0.0
+            ],
+            [
+              39.816,
+              0.436
+            ]
+          ],
+          "arc": {
+            "center": [
+              38.0,
+              4.0
+            ],
+            "radius": 4.0,
+            "startAngle": -63.0,
+            "endAngle": -27.0
+          },
+          "cubic2": [
+            [
+              42.0,
+              3.0397
+            ],
+            [
+              42.0,
+              4.1598
+            ],
+            [
+              42.0,
+              6.4
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "brand mark box 36x24 r4, smoothing 0.6",
+      "width": 36,
+      "height": 24,
+      "radius": 4,
+      "smoothing": 0.6,
+      "expect": {
+        "radius": 4.0,
+        "smoothing": 0.6,
+        "p": 6.4,
+        "a": 2.2402,
+        "b": 1.1201,
+        "c": 0.8556,
+        "d": 0.436,
+        "arcSectionLength": 1.7481,
+        "arcMeasure": 36.0,
+        "topRight": {
+          "start": [
+            29.6,
+            0.0
+          ],
+          "cubic1": [
+            [
+              31.8402,
+              0.0
+            ],
+            [
+              32.9603,
+              0.0
+            ],
+            [
+              33.816,
+              0.436
+            ]
+          ],
+          "arc": {
+            "center": [
+              32.0,
+              4.0
+            ],
+            "radius": 4.0,
+            "startAngle": -63.0,
+            "endAngle": -27.0
+          },
+          "cubic2": [
+            [
+              36.0,
+              3.0397
+            ],
+            [
+              36.0,
+              4.1598
+            ],
+            [
+              36.0,
+              6.4
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "pill: no room for smoothing, so it drops to 0",
+      "width": 48,
+      "height": 48,
+      "radius": 24,
+      "smoothing": 0.6,
+      "expect": {
+        "radius": 24.0,
+        "smoothing": 0.0,
+        "p": 24.0,
+        "a": 0.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 0.0,
+        "arcSectionLength": 24.0,
+        "arcMeasure": 90.0,
+        "topRight": {
+          "start": [
+            24.0,
+            0.0
+          ],
+          "cubic1": [
+            [
+              24.0,
+              0.0
+            ],
+            [
+              24.0,
+              0.0
+            ],
+            [
+              24.0,
+              0.0
+            ]
+          ],
+          "arc": {
+            "center": [
+              24.0,
+              24.0
+            ],
+            "radius": 24.0,
+            "startAngle": -90.0,
+            "endAngle": 0.0
+          },
+          "cubic2": [
+            [
+              48.0,
+              24.0
+            ],
+            [
+              48.0,
+              24.0
+            ],
+            [
+              48.0,
+              24.0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "radius larger than half the height is clamped",
+      "width": 100,
+      "height": 40,
+      "radius": 30,
+      "smoothing": 0.5,
+      "expect": {
+        "radius": 20.0,
+        "smoothing": 0.0,
+        "p": 20.0,
+        "a": 0.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 0.0,
+        "arcSectionLength": 20.0,
+        "arcMeasure": 90.0,
+        "topRight": {
+          "start": [
+            80.0,
+            0.0
+          ],
+          "cubic1": [
+            [
+              80.0,
+              0.0
+            ],
+            [
+              80.0,
+              0.0
+            ],
+            [
+              80.0,
+              0.0
+            ]
+          ],
+          "arc": {
+            "center": [
+              80.0,
+              20.0
+            ],
+            "radius": 20.0,
+            "startAngle": -90.0,
+            "endAngle": 0.0
+          },
+          "cubic2": [
+            [
+              100.0,
+              20.0
+            ],
+            [
+              100.0,
+              20.0
+            ],
+            [
+              100.0,
+              20.0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "smoothing limited by the budget",
+      "width": 100,
+      "height": 40,
+      "radius": 14,
+      "smoothing": 0.8,
+      "expect": {
+        "radius": 14.0,
+        "smoothing": 0.4286,
+        "p": 20.0,
+        "a": 5.5858,
+        "b": 2.7929,
+        "c": 2.2452,
+        "d": 0.7856,
+        "arcSectionLength": 8.5905,
+        "arcMeasure": 51.4286,
+        "topRight": {
+          "start": [
+            80.0,
+            0.0
+          ],
+          "cubic1": [
+            [
+              85.5858,
+              0.0
+            ],
+            [
+              88.3787,
+              0.0
+            ],
+            [
+              90.6239,
+              0.7856
+            ]
+          ],
+          "arc": {
+            "center": [
+              86.0,
+              14.0
+            ],
+            "radius": 14.0,
+            "startAngle": -70.7143,
+            "endAngle": -19.2857
+          },
+          "cubic2": [
+            [
+              100.0,
+              11.6213
+            ],
+            [
+              100.0,
+              14.4142
+            ],
+            [
+              100.0,
+              20.0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "square corners",
+      "width": 300,
+      "height": 48,
+      "radius": 0,
+      "smoothing": 0.6,
+      "expect": {
+        "radius": 0.0,
+        "smoothing": 0.6,
+        "p": 0.0,
+        "a": 0.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 0.0,
+        "arcSectionLength": 0.0,
+        "arcMeasure": 90.0,
+        "topRight": {
+          "start": [
+            300.0,
+            0.0
+          ],
+          "cubic1": [
+            [
+              300.0,
+              0.0
+            ],
+            [
+              300.0,
+              0.0
+            ],
+            [
+              300.0,
+              0.0
+            ]
+          ],
+          "arc": {
+            "center": [
+              300.0,
+              0.0
+            ],
+            "radius": 0.0,
+            "startAngle": -90.0,
+            "endAngle": 0.0
+          },
+          "cubic2": [
+            [
+              300.0,
+              0.0
+            ],
+            [
+              300.0,
+              0.0
+            ],
+            [
+              300.0,
+              0.0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "smoothing above 1 is clamped",
+      "width": 300,
+      "height": 48,
+      "radius": 12,
+      "smoothing": 1.5,
+      "expect": {
+        "radius": 12.0,
+        "smoothing": 1.0,
+        "p": 24.0,
+        "a": 11.3137,
+        "b": 5.6569,
+        "c": 3.5147,
+        "d": 3.5147,
+        "arcSectionLength": 0.0,
+        "arcMeasure": 0.0,
+        "topRight": {
+          "start": [
+            276.0,
+            0.0
+          ],
+          "cubic1": [
+            [
+              287.3137,
+              0.0
+            ],
+            [
+              292.9706,
+              0.0
+            ],
+            [
+              296.4853,
+              3.5147
+            ]
+          ],
+          "arc": {
+            "center": [
+              288.0,
+              12.0
+            ],
+            "radius": 12.0,
+            "startAngle": -45.0,
+            "endAngle": -45.0
+          },
+          "cubic2": [
+            [
+              300.0,
+              7.0294
+            ],
+            [
+              300.0,
+              12.6863
+            ],
+            [
+              300.0,
+              24.0
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "name": "negative smoothing is clamped",
+      "width": 300,
+      "height": 48,
+      "radius": 12,
+      "smoothing": -0.2,
+      "expect": {
+        "radius": 12.0,
+        "smoothing": 0.0,
+        "p": 12.0,
+        "a": 0.0,
+        "b": 0.0,
+        "c": 0.0,
+        "d": 0.0,
+        "arcSectionLength": 12.0,
+        "arcMeasure": 90.0,
+        "topRight": {
+          "start": [
+            288.0,
+            0.0
+          ],
+          "cubic1": [
+            [
+              288.0,
+              0.0
+            ],
+            [
+              288.0,
+              0.0
+            ],
+            [
+              288.0,
+              0.0
+            ]
+          ],
+          "arc": {
+            "center": [
+              288.0,
+              12.0
+            ],
+            "radius": 12.0,
+            "startAngle": -90.0,
+            "endAngle": 0.0
+          },
+          "cubic2": [
+            [
+              300.0,
+              12.0
+            ],
+            [
+              300.0,
+              12.0
+            ],
+            [
+              300.0,
+              12.0
+            ]
+          ]
+        }
+      }
+    }
+  ]
+}

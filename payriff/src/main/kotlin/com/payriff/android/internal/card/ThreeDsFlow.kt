@@ -5,16 +5,19 @@ import com.payriff.android.PayriffErrorCode
 import com.payriff.android.PayriffResult
 import com.payriff.android.internal.PayriffLog
 import com.payriff.android.internal.Urls
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.net.URLEncoder
 
-/** Timings of CONTRACT §16.7. */
+/** Timings of CONTRACT §16.7 and of the 3-D Secure Method step of §19.1 (`card_next_action.json` → `threeDsTiming`). */
 internal class CardTimings(
-    val threeDsIntervalMillis: Long = 1_000L,
-    val threeDsTries: Int = 30,
+    val methodLoadTimeoutMillis: Long = 10_000L,
+    val waitIntervalMillis: Long = 2_000L,
+    val waitLimitMillis: Long = 30_000L,
     val statusIntervalMillis: Long = 2_500L,
     val statusTimeoutMillis: Long = 120_000L,
 )
@@ -35,7 +38,9 @@ internal interface ThreeDsUi {
 
     /**
      * 3DS Method: POSTs [methodBody] to [methodUrl] in hidden WebView 1 and an empty body to [methodUrlServer] in hidden
-     * WebView 2, each when set. The hidden WebViews stay invisible under the native loader.
+     * WebView 2, each when set, back to back. The hidden WebViews stay invisible under the native loader. For each one
+     * it starts, the UI calls [ThreeDsFlow.onMethodPageLoaded] once its first page has loaded or failed, or at once when
+     * it cannot create it.
      */
     fun runMethod(methodUrl: String?, methodBody: ByteArray?, methodUrlServer: String?)
     fun destroyHiddenWebViews()
@@ -50,9 +55,9 @@ internal interface ThreeDsUi {
 }
 
 /**
- * Step 4–5 of CONTRACT §16.7 and the 3DS sheet of §16.8, after `/pay` answered: runs the next action, the `/three-ds`
- * loop, the 3DS WebView navigation, status polling and the close path. Main thread only. The card flow never ends as
- * `cancelled(userClosed)`: the card was already submitted.
+ * Step 4–5 of CONTRACT §16.7 and the 3DS sheet of §16.8, after `/pay` answered: runs the next action, the 3-D Secure
+ * Method step of §19.1, the 3DS WebView navigation, status polling and the close path. Main thread only. The card flow
+ * never ends as `cancelled(userClosed)`: the card was already submitted.
  */
 internal class ThreeDsFlow(
     private val scope: CoroutineScope,
@@ -77,6 +82,10 @@ internal class ThreeDsFlow(
     private var pageShown = false
     private var errorShown = false
 
+    /** The hidden Method WebViews whose first page has not loaded yet, and what completes when none is left. */
+    private var methodPagesPending = 0
+    private var methodPagesLoaded: CompletableDeferred<Unit>? = null
+
     var isFinished: Boolean = false
         private set
 
@@ -99,8 +108,9 @@ internal class ThreeDsFlow(
                 openPage { ui.postChallenge(action.url, body) }
             }
             is NextAction.Redirect -> openPage { ui.loadRedirect(action.url) }
-            is NextAction.Method -> startThreeDsLoop(action)
-            NextAction.Wait -> startThreeDsLoop(null)
+            is NextAction.Method -> startMethod(action)
+            // CONTRACT §19.1: a wait from /pay is handled like a wait from /three-ds.
+            NextAction.Wait -> startMethod(null)
             NextAction.CheckStatus -> verify()
             NextAction.Invalid -> checkOnce {
                 PayriffError(PayriffErrorCode.UNEXPECTED_RESPONSE, "Payriff answered with a next step the SDK cannot run.").let(PayriffResult::Failed)
@@ -140,6 +150,18 @@ internal class ThreeDsFlow(
      */
     fun onSubframeCallbackObserved() {
         if (phase == Phase.PAGE) startPolling()
+    }
+
+    /**
+     * A hidden 3-D Secure Method WebView has loaded its first page, or failed to (CONTRACT §19.1 step 2). Called once per
+     * WebView that [ThreeDsUi.runMethod] started.
+     */
+    fun onMethodPageLoaded() {
+        val loaded = methodPagesLoaded ?: return
+        methodPagesPending--
+        if (methodPagesPending > 0) return
+        methodPagesLoaded = null
+        loaded.complete(Unit)
     }
 
     /** Page content of the visible WebView is showing. */
@@ -209,43 +231,72 @@ internal class ThreeDsFlow(
         load()
     }
 
-    /** 3DS Method (when [method] has work), then `GET /three-ds` every second, at most 30 times. */
-    private fun startThreeDsLoop(method: NextAction.Method?) {
+    /**
+     * The 3-D Secure Method step (CONTRACT §19.1), under the native loader:
+     * 1. the hidden WebViews of [method] (the issuer's only with both its URL and its data, the 3DS Server's with its URL);
+     * 2. at most 10 s for their first pages to load, because the bank needs the browser data before `/three-ds`;
+     * 3. one `GET /three-ds` (60 s, one retry, [CardApi.threeDs]);
+     * 4. while it answers `wait`: again every 2 s, for at most 30 s from the first answer;
+     * 5. a challenge or a redirect runs in the sheet; anything else, also an error, goes to status polling.
+     *
+     * A `wait` from `/pay` ([method] `null`) starts at step 4, with `/pay`'s answer as the first one.
+     */
+    private fun startMethod(method: NextAction.Method?) {
         phase = Phase.LOADER
         ui.setCloseEnabled(true)
         ui.showLoader(verifying = false)
-        if (method != null && method.hasWork) runMethod(method)
+        val pagesLoaded = method?.let(::runMethod)
         loopJob = scope.launch {
-            repeat(timings.threeDsTries) {
-                delay(timings.threeDsIntervalMillis)
-                val next = try {
-                    api.threeDs(orderId)
-                } catch (e: PayriffError) {
-                    if (e.code == PayriffErrorCode.NETWORK_ERROR) return@repeat
-                    ui.destroyHiddenWebViews()
-                    checkOnce { PayriffResult.Failed(e) }
-                    return@launch
+            var next: NextAction? = NextAction.Wait
+            if (method != null) {
+                if (pagesLoaded != null && withTimeoutOrNull(timings.methodLoadTimeoutMillis) { pagesLoaded.await() } == null) {
+                    PayriffLog.info { "The 3-D Secure Method pages did not load in ${timings.methodLoadTimeoutMillis / MILLIS_PER_SECOND} s." }
                 }
-                when {
-                    next is NextAction.Wait -> Unit
-                    next is NextAction.Method && !next.hasWork -> Unit
-                    next is NextAction.Method -> runMethod(next)
-                    else -> {
-                        ui.destroyHiddenWebViews()
-                        run(next)
-                        return@launch
-                    }
+                next = threeDsOrNull()
+            }
+            val firstAnswer = clock()
+            while (next === NextAction.Wait && clock() - firstAnswer + timings.waitIntervalMillis <= timings.waitLimitMillis) {
+                delay(timings.waitIntervalMillis)
+                next = threeDsOrNull()
+            }
+            // Step 6: the hidden WebViews live until the step hands over.
+            ui.destroyHiddenWebViews()
+            methodPagesLoaded = null
+            when (val answer = next) {
+                is NextAction.Challenge -> run(answer)
+                is NextAction.Redirect -> run(answer)
+                else -> {
+                    PayriffLog.info { "3DS step after the Method: ${answer ?: "no answer"}; polling the status." }
+                    verify()
                 }
             }
-            PayriffLog.info { "No 3DS step after ${timings.threeDsTries} tries: polling the status." }
-            verify()
         }
     }
 
-    private fun runMethod(method: NextAction.Method) {
+    /**
+     * Starts the hidden WebViews of [method] back to back (CONTRACT §19.1 step 1). Returns what completes once each has
+     * loaded its first page, or `null` when none was started.
+     */
+    private fun runMethod(method: NextAction.Method): CompletableDeferred<Unit>? {
+        val issuer = method.methodUrl?.takeIf { method.runsIssuer }
+        val server = method.methodUrlServer
+        val started = listOfNotNull(issuer, server).size
+        if (started == 0) return null
         PayriffLog.info { "3DS Method: $method" }
-        val body = method.methodUrl?.let { formBody(listOf(METHOD_DATA to method.methodData.orEmpty())) }
-        ui.runMethod(method.methodUrl, body, method.methodUrlServer)
+        val loaded = CompletableDeferred<Unit>()
+        methodPagesLoaded = loaded
+        methodPagesPending = started
+        val body = issuer?.let { formBody(listOf(METHOD_DATA to method.methodData.orEmpty())) }
+        ui.runMethod(issuer, body, server)
+        return loaded
+    }
+
+    /** `GET /three-ds`; `null` when it failed after its retry (CONTRACT §19.1 step 5: status polling decides). */
+    private suspend fun threeDsOrNull(): NextAction? = try {
+        api.threeDs(orderId)
+    } catch (e: PayriffError) {
+        PayriffLog.warning { "/three-ds failed: ${e.code}" }
+        null
     }
 
     /** Status polling behind the "Checking payment…" loader (CONTRACT §16.7 step 5). */

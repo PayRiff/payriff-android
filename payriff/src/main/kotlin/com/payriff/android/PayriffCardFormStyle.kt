@@ -92,6 +92,11 @@ public data class PayriffTextStyle @JvmOverloads constructor(
  * @property labelSpacing Space between a label and its field in dp. Defaults to 10.
  * @property sectionSpacing Space between the sections, such as the cardholder name and the card box, in dp. Defaults to
  *   16.
+ * @property cornerSmoothing Smooths the corners of the outlines and of the brand mark box, from 0 (circular corners) to
+ *   1, as Figma's corner smoothing (CONTRACT §18.2). Values outside 0…1 are clamped. `null` (the default) takes
+ *   [PayriffPaymentViewStyle.cornerSmoothing] inside a [PayriffPaymentView], else 0.
+ * @property brandMarkBorderColor The border of the brand mark box in the card number field; `null` is
+ *   [PayriffPaymentViewStyle.badgeBorderColor] inside a [PayriffPaymentView] when that is set, else `#D1D1D6`.
  */
 public data class PayriffCardFormStyle(
     public val layout: PayriffCardFormLayout = PayriffCardFormLayout.GROUPED,
@@ -113,6 +118,8 @@ public data class PayriffCardFormStyle(
     public val horizontalPadding: Float = 14f,
     public val labelSpacing: Float = 10f,
     public val sectionSpacing: Float = 16f,
+    public val cornerSmoothing: Float? = null,
+    @ColorInt public val brandMarkBorderColor: Int? = null,
 ) {
 
     /** Returns a [Builder] pre-filled with this style. */
@@ -180,6 +187,12 @@ public data class PayriffCardFormStyle(
 
         /** Sets [PayriffCardFormStyle.sectionSpacing], in dp. */
         public fun sectionSpacing(value: Float): Builder = apply { style = style.copy(sectionSpacing = value) }
+
+        /** Sets [PayriffCardFormStyle.cornerSmoothing], from 0 to 1; `null` follows the payment view. */
+        public fun cornerSmoothing(value: Float?): Builder = apply { style = style.copy(cornerSmoothing = value) }
+
+        /** Sets [PayriffCardFormStyle.brandMarkBorderColor]. */
+        public fun brandMarkBorderColor(@ColorInt value: Int?): Builder = apply { style = style.copy(brandMarkBorderColor = value) }
 
         /** Creates the style. */
         public fun build(): PayriffCardFormStyle = style

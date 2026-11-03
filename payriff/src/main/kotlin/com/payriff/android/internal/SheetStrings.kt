@@ -16,58 +16,68 @@ internal enum class StringKey(val key: String) {
 }
 
 /**
- * The 3-D Secure sheet's strings. Every text must equal `vectors/strings.json`; a unit test checks it. The vector's
- * other keys belonged to the hosted payment page, which this SDK no longer has.
- * In-code strings keep the AAR free of resources that host apps could accidentally override.
+ * The 3-D Secure sheet's built-in strings. Every text must equal `vectors/strings.json`; a unit test checks it. The
+ * vector's other keys belonged to the hosted payment page, which this SDK no longer has. In-code strings keep the AAR
+ * free of resources that host apps could accidentally override. An app replaces them with
+ * [com.payriff.android.PayriffStrings] (CONTRACT §18.6), whose name this object had before revision 8.
  */
-internal object PayriffStrings {
+internal object SheetStrings {
 
-    /** key -> language code (`az`, `en`, `ru`) -> text. */
+    /** key -> language code (`az`, `en`, `ru`, `ar`) -> text. */
     val table: Map<String, Map<String, String>> = mapOf(
         "title" to mapOf(
             "az" to "Ödəniş",
             "en" to "Payment",
             "ru" to "Оплата",
+            "ar" to "الدفع",
         ),
         "verifying" to mapOf(
             "az" to "Ödəniş yoxlanılır…",
             "en" to "Checking payment…",
             "ru" to "Проверяем платёж…",
+            "ar" to "جارٍ التحقق من الدفع…",
         ),
         "close" to mapOf(
             "az" to "Bağla",
             "en" to "Close",
             "ru" to "Закрыть",
+            "ar" to "إغلاق",
         ),
         "retry" to mapOf(
             "az" to "Yenidən cəhd et",
             "en" to "Try again",
             "ru" to "Повторить",
+            "ar" to "إعادة المحاولة",
         ),
         "cancel_confirm_title" to mapOf(
             "az" to "Pəncərəni bağlayaq?",
             "en" to "Close this window?",
             "ru" to "Закрыть окно?",
+            "ar" to "إغلاق هذه النافذة؟",
         ),
         "cancel_confirm_message" to mapOf(
             "az" to "Ödəniş hələ tamamlanmayıb. Pəncərəni bağlasanız, ödənişin statusunu yoxlayacağıq.",
             "en" to "The payment isn't finished yet. If you close this window, we'll check its status.",
             "ru" to "Оплата ещё не завершена. Если закрыть окно, мы проверим её статус.",
+            "ar" to "لم يكتمل الدفع بعد. إذا أغلقت هذه النافذة، فسنتحقق من حالته.",
         ),
         "cancel_confirm_yes" to mapOf(
             "az" to "Bağla",
             "en" to "Close",
             "ru" to "Закрыть",
+            "ar" to "إغلاق",
         ),
         "cancel_confirm_no" to mapOf(
             "az" to "Ödənişə davam et",
             "en" to "Continue payment",
             "ru" to "Продолжить оплату",
+            "ar" to "متابعة الدفع",
         ),
         "page_load_error" to mapOf(
             "az" to "Səhifə yüklənmədi. İnternet bağlantınızı yoxlayın.",
             "en" to "The page couldn't be loaded. Check your internet connection.",
             "ru" to "Не удалось загрузить страницу. Проверьте подключение к интернету.",
+            "ar" to "تعذّر تحميل الصفحة. تحقّق من اتصالك بالإنترنت.",
         ),
     )
 
@@ -82,5 +92,6 @@ internal object PayriffStrings {
             PayriffLanguage.AZ -> "az"
             PayriffLanguage.EN -> "en"
             PayriffLanguage.RU -> "ru"
+            PayriffLanguage.AR -> "ar"
         }
 }

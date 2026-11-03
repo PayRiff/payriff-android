@@ -3,7 +3,6 @@ package com.payriff.android
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.res.Configuration
-import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.text.Editable
 import android.text.InputFilter
@@ -32,20 +31,28 @@ import com.payriff.android.internal.card.CardFormPlan
 import com.payriff.android.internal.card.CardFormStyles
 import com.payriff.android.internal.card.CardFormat
 import com.payriff.android.internal.card.CardPlaintext
-import com.payriff.android.internal.card.CardStrings
 import com.payriff.android.internal.card.CardValidation
 import com.payriff.android.internal.card.FieldUiState
+import com.payriff.android.internal.card.FormDefaults
 import com.payriff.android.internal.card.ResolvedCardFormStyle
+import com.payriff.android.internal.card.ResolvedStrings
 import com.payriff.android.internal.card.SecureWindows
+import com.payriff.android.internal.card.SquircleDrawable
 import com.payriff.android.internal.card.applyTextStyle
 import com.payriff.android.internal.screenProtectionOn
 import java.util.Calendar
 import kotlin.math.roundToInt
 
-/** Card brands the form accepts (CONTRACT §16.4). */
+/** Card brands the form accepts (CONTRACT §16.4, §19.2). */
 public enum class PayriffCardBrand {
     VISA,
     MASTERCARD,
+
+    /**
+     * mada, Saudi Arabia's domestic debit network (CONTRACT §19.2). It is recognised once the whole 6- or 8-digit BIN is
+     * typed, so a card that is also Visa or Mastercard shows that brand first and then mada.
+     */
+    MADA,
 }
 
 /**
@@ -100,9 +107,12 @@ public fun interface PayriffCardFormListener {
  *   bottom sheet or popup, so screenshots, recordings and the recents thumbnail show nothing
  *   ([PayriffConfig.allowScreenCaptureInDebug] turns this off in debug builds only).
  *
- * Labels, placeholders and errors follow [language] (default: [PayriffConfig.language], then the device language), and
- * the default colours follow the system light or dark theme. For the complete payment screen of the hosted page, with
- * the Pay button, use [PayriffPaymentView], which contains this form.
+ * Labels, placeholders and errors follow [language] (default: [PayriffConfig.language], then the device language), or
+ * your own texts in [PayriffConfig.strings] (CONTRACT §18.6), and the default colours follow the system light or dark
+ * theme. The form follows the layout direction (CONTRACT §18.7), and is right-to-left in Arabic too (§19.3): the brand
+ * mark sits on the trailing side and expiry | CVC swap places, while the card number, expiry and CVC always read
+ * left-to-right. For the complete payment screen of the hosted page, with the Pay button, use [PayriffPaymentView],
+ * which contains this form.
  */
 public class PayriffCardForm @JvmOverloads constructor(
     context: Context,
@@ -157,6 +167,26 @@ public class PayriffCardForm @JvmOverloads constructor(
     public val isComplete: Boolean
         get() = mountedFields().all { it.check().valid }
 
+    /** The texts of the [PayriffPaymentView] that contains this form ([PayriffPaymentView.strings]), or `null`. */
+    internal var viewStrings: PayriffStrings? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            applyTexts()
+        }
+
+    /** What the [PayriffPaymentView] that contains this form gives it where [style] leaves it out (CONTRACT §18.2, §18.4). */
+    internal var defaults: FormDefaults = FormDefaults()
+        set(value) {
+            if (field == value) return
+            field = value
+            rebuild()
+        }
+
+    /** Whether the form is laid out right-to-left: its layout direction, or Arabic (CONTRACT §18.7, §19.3). */
+    internal val isLayoutRtl: Boolean
+        get() = layoutDirection == LAYOUT_DIRECTION_RTL
+
     private val number = Field(PayriffCardField.NUMBER)
     private val expiry = Field(PayriffCardField.EXPIRY)
     private val cvv = Field(PayriffCardField.CVV)
@@ -168,6 +198,9 @@ public class PayriffCardForm @JvmOverloads constructor(
     private var night = isNight(resources.configuration)
     private var rebuilding = false
     private var screenProtection: SecureWindows.Protection? = null
+
+    /** Whether the form set itself right-to-left for Arabic (CONTRACT §19.3). */
+    private var arabicLayout = false
 
     init {
         orientation = VERTICAL
@@ -241,10 +274,10 @@ public class PayriffCardForm @JvmOverloads constructor(
         submitted = true
         sections.forEach { it.render() }
         mountedFields().forEach { emit(it) }
-        val language = effectiveLanguage()
+        val texts = texts()
         val errors = mountedFields().mapNotNull { field ->
             val code = field.check().errorCode ?: return@mapNotNull null
-            PayriffFieldError(field.field, code.value, CardStrings.error(language, field.field, code))
+            PayriffFieldError(field.field, code.value, texts.error(field.field, code))
         }
         if (errors.isNotEmpty()) return Collected.Invalid(errors)
         val pan = CardValidation.validateNumber(number.input.text).value
@@ -270,8 +303,12 @@ public class PayriffCardForm @JvmOverloads constructor(
 
     internal fun effectiveLanguage(): PayriffLanguage {
         val tag = ConfigurationCompat.getLocales(resources.configuration)[0]?.toLanguageTag()
-        return Languages.effective(language, Payriff.config?.language, tag)
+        val config = Payriff.config
+        return Languages.effective(language, config?.language, tag, config?.region ?: PayriffRegion.AZ)
     }
+
+    /** The form's texts (CONTRACT §18.6): the payment view's, then [PayriffConfig.strings], then the built-in ones. */
+    internal fun texts(): ResolvedStrings = ResolvedStrings(effectiveLanguage(), viewStrings, Payriff.config?.strings)
 
     // endregion
 
@@ -292,6 +329,14 @@ public class PayriffCardForm @JvmOverloads constructor(
             input.id = generateViewId()
             input.background = null
             input.gravity = Gravity.CENTER_VERTICAL or Gravity.START
+            if (CardFormPlan.isLeftToRight(field)) {
+                // CONTRACT §18.7: digits and their placeholders read left to right and align left in every layout.
+                input.textDirection = TEXT_DIRECTION_LTR
+                input.textAlignment = TEXT_ALIGNMENT_TEXT_START
+            } else {
+                // The cardholder name follows the layout direction: it starts at the leading edge.
+                input.textAlignment = TEXT_ALIGNMENT_VIEW_START
+            }
             input.setOnFocusChangeListener { _, hasFocus ->
                 // A rebuild moves the inputs into new sections; that is not the customer leaving the field.
                 if (rebuilding) return@setOnFocusChangeListener
@@ -350,16 +395,19 @@ public class PayriffCardForm @JvmOverloads constructor(
         val label = TextView(context)
         val error = TextView(context)
         private val box = LinearLayout(context).apply { orientation = VERTICAL }
-        private val outline = GradientDrawable()
+        private val outline = SquircleDrawable()
 
         init {
             val s = resolved
             label.applyTextStyle(s.label)
+            // CONTRACT §18.7: labels and errors start at the leading edge.
+            label.textAlignment = TEXT_ALIGNMENT_VIEW_START
             label.visibility = if (s.showLabels) View.VISIBLE else View.GONE
             root.addView(label, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { bottomMargin = s.labelSpacingPx })
 
-            outline.cornerRadius = s.cornerRadiusPx
-            outline.setColor(s.fieldBackgroundColor)
+            // CONTRACT §18.2: the outline, smoothed, with the border inside it.
+            outline.setShape(s.cornerRadiusPx, s.cornerSmoothing)
+            outline.setFill(s.fieldBackgroundColor)
             box.background = outline
             // The cells sit inside the outline, so they never cover it.
             box.setPadding(s.borderWidthPx, s.borderWidthPx, s.borderWidthPx, s.borderWidthPx)
@@ -370,6 +418,7 @@ public class PayriffCardForm @JvmOverloads constructor(
             root.addView(box, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
 
             error.applyTextStyle(s.error)
+            error.textAlignment = TEXT_ALIGNMENT_VIEW_START
             error.accessibilityLiveRegion = ACCESSIBILITY_LIVE_REGION_POLITE
             error.visibility = View.GONE
             root.addView(error, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = dp(ERROR_GAP_DP) })
@@ -392,7 +441,7 @@ public class PayriffCardForm @JvmOverloads constructor(
         /** Shows the section's one error line and colours its outline and its invalid fields. */
         fun render() {
             val line = CardFormPlan.errorLine(plan) { fieldOf(it).visibleError() }
-            val message = line?.let { (field, code) -> CardStrings.error(effectiveLanguage(), field, code) }
+            val message = line?.let { (field, code) -> texts().error(field, code) }
             if (message == null) {
                 if (error.length() > 0) error.text = ""
                 error.visibility = View.GONE
@@ -402,7 +451,7 @@ public class PayriffCardForm @JvmOverloads constructor(
                 if (error.text.toString() != message) error.text = message
             }
             val color = resolved.outlineColor(showsError = line != null, focused = fields.any { it.focused })
-            outline.setStroke(resolved.borderWidthPx, color)
+            outline.setStroke(resolved.borderWidthPx.toFloat(), color)
             for (field in fields) field.input.setTextColor(if (field.visibleError() != null) resolved.errorColor else resolved.input.color)
         }
     }
@@ -453,7 +502,7 @@ public class PayriffCardForm @JvmOverloads constructor(
     private fun emit(target: Field) {
         val listener = onChangeListener ?: return
         val check = target.check()
-        val shown = target.visibleError()?.let { CardStrings.error(effectiveLanguage(), target.field, it) }
+        val shown = target.visibleError()?.let { texts().error(target.field, it) }
         listener.onChange(
             PayriffCardFormChange(
                 field = target.field,
@@ -526,7 +575,7 @@ public class PayriffCardForm @JvmOverloads constructor(
         val focusedField = allFields().firstOrNull { it.input.hasFocus() }
         rebuilding = true
         try {
-            resolved = CardFormStyles.resolve(style, night, resources.displayMetrics.density)
+            resolved = CardFormStyles.resolve(style, night, resources.displayMetrics.density, defaults)
             removeAllViews()
             allFields().forEach { it.section = null }
             val lines = CardFormPlan.lines(resolved.layout, showHolder)
@@ -579,6 +628,8 @@ public class PayriffCardForm @JvmOverloads constructor(
         }
         detach(brandMark)
         brandMark.outlineColor = s.placeholderColor
+        brandMark.borderColor = s.brandMarkBorderColor
+        brandMark.smoothing = s.cornerSmoothing
         input.setPaddingRelative(padding, dp(PADDING_V_DP), padding + dp(BRAND_WIDTH_DP) + padding, dp(PADDING_V_DP))
         return FrameLayout(context).apply {
             addView(input, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT))
@@ -613,17 +664,26 @@ public class PayriffCardForm @JvmOverloads constructor(
     }
 
     private fun applyTexts() {
-        val language = effectiveLanguage()
-        for (field in allFields()) field.input.hint = CardStrings.placeholder(language, field.field)
+        val texts = texts()
+        updateLayoutDirection(texts.language)
+        for (field in allFields()) field.input.hint = texts.placeholder(field.field)
         for (section in sections) {
-            section.label.text = CardFormPlan.labelText(section.plan.label, style, language)
+            section.label.text = CardFormPlan.labelText(section.plan.label, style, texts)
             val named = CardFormPlan.labelNamesField(section.plan, style)
             section.label.labelFor = if (named) section.fields.single().input.id else View.NO_ID
             for (field in section.fields) {
-                field.accessibilityLabel = CardFormPlan.accessibilityLabel(section.plan, field.field, style, language)
+                field.accessibilityLabel = CardFormPlan.accessibilityLabel(section.plan, field.field, style, texts)
             }
             section.render()
         }
+    }
+
+    /** Right-to-left in Arabic (CONTRACT §19.3); otherwise the form follows its parent's layout direction. */
+    private fun updateLayoutDirection(language: PayriffLanguage) {
+        val arabic = Languages.isRightToLeft(language)
+        if (arabic == arabicLayout) return
+        arabicLayout = arabic
+        layoutDirection = if (arabic) LAYOUT_DIRECTION_RTL else LAYOUT_DIRECTION_INHERIT
     }
 
     private fun updateLocked() {

@@ -7,7 +7,6 @@ import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.text.style.ReplacementSpan
 import android.view.Gravity
@@ -16,7 +15,6 @@ import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import androidx.annotation.ColorInt
 import androidx.core.graphics.withTranslation
 import androidx.core.view.AccessibilityDelegateCompat
 import androidx.core.view.ViewCompat
@@ -26,15 +24,17 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
- * The Pay button of [com.payriff.android.PayriffPaymentView] (CONTRACT §16.14): full width, a filled rounded shape and
- * a one-line title. 50% opacity while disabled or busy and 80% while pressed; while busy a spinner in the title's
- * colour replaces the title. Accessibility services read it as a button named by its title.
+ * The Pay button of [com.payriff.android.PayriffPaymentView] (CONTRACT §16.14): full width, a filled rounded shape
+ * (smoothed by the style's corner smoothing, §18.2) and a one-line title. 50% opacity while disabled or busy, or the
+ * style's disabled colours at full opacity (§18.3), and 80% while pressed; while busy a spinner in the title's colour
+ * replaces the title. Accessibility services read it as a button named by its title.
  */
 internal class PayButton(context: Context) : FrameLayout(context) {
 
     private val label = TextView(context)
     private val spinner = ProgressBar(context)
-    private val shape = GradientDrawable()
+    private val shape = SquircleDrawable()
+    private var colors = PaymentViewPlan.ButtonColors(PaymentViewPlan.BUTTON_COLOR, PaymentViewPlan.BUTTON_TEXT_COLOR, null, null)
 
     /** The title, for example "Pay 1.02 AZN". */
     var title: String = ""
@@ -52,7 +52,7 @@ internal class PayButton(context: Context) : FrameLayout(context) {
             field = value
             label.visibility = if (value) INVISIBLE else VISIBLE
             spinner.visibility = if (value) VISIBLE else GONE
-            updateAlpha()
+            updateLook()
         }
 
     init {
@@ -85,34 +85,37 @@ internal class PayButton(context: Context) : FrameLayout(context) {
                 }
             },
         )
-        updateAlpha()
+        updateLook()
     }
 
-    /** The look: [color] fill, [text] for the title (and its colour for the spinner), height and corner radius in pixels. */
-    fun apply(@ColorInt color: Int, text: ResolvedTextStyle, minHeightPx: Int, cornerRadiusPx: Float) {
-        shape.setColor(color)
-        shape.cornerRadius = cornerRadiusPx
+    /**
+     * The look: [colors] for the fill and the title (and the spinner) in each state, [text] for the title's size and
+     * font, the minimum height and the corner radius in pixels, and the corner [smoothing].
+     */
+    fun apply(colors: PaymentViewPlan.ButtonColors, text: ResolvedTextStyle, minHeightPx: Int, cornerRadiusPx: Float, smoothing: Float) {
+        this.colors = colors
+        shape.setShape(cornerRadiusPx, smoothing)
         label.applyTextStyle(text)
-        spinner.indeterminateTintList = ColorStateList.valueOf(text.color)
         minimumHeight = minHeightPx
+        updateLook()
     }
 
     override fun setEnabled(enabled: Boolean) {
         super.setEnabled(enabled)
-        updateAlpha()
+        updateLook()
     }
 
     override fun setPressed(pressed: Boolean) {
         super.setPressed(pressed)
-        updateAlpha()
+        updateLook()
     }
 
-    private fun updateAlpha() {
-        alpha = when {
-            !isEnabled || isBusy -> PaymentViewPlan.DISABLED_ALPHA
-            isPressed -> PaymentViewPlan.PRESSED_ALPHA
-            else -> 1f
-        }
+    private fun updateLook() {
+        val look = PaymentViewPlan.buttonLook(colors, disabled = !isEnabled || isBusy, pressed = isPressed)
+        shape.setFill(look.background)
+        label.setTextColor(look.text)
+        spinner.indeterminateTintList = ColorStateList.valueOf(look.text)
+        alpha = look.alpha
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()

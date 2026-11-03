@@ -134,7 +134,7 @@ public class PayriffGooglePayButton @JvmOverloads constructor(
     private val host = object : GooglePayPayment.Host {
         override fun resumableOrder(orderId: String): GooglePayPayment.Order? {
             val secret = controller.clientSecret ?: return null
-            return if (orderId == controller.orderId?.trim()) GooglePayPayment.Order(orderId, secret, null) else null
+            return if (orderId == controller.orderId?.trim()) googlePayOrder(orderId, secret) else null
         }
 
         override fun onResumed(orderId: String) = controller.paymentResumed()
@@ -264,10 +264,14 @@ public class PayriffGooglePayButton @JvmOverloads constructor(
             if (current == null) {
                 controller.finishPayment(PayriffResult.Failed(PayriffError(PayriffErrorCode.PRESENTATION_FAILED, NO_ACTIVITY_MESSAGE)))
             } else {
-                current.payment.start(GooglePayPayment.Order(orderId, clientSecret, null), transaction)
+                current.payment.start(googlePayOrder(orderId, clientSecret), transaction)
             }
         }
     }
+
+    /** The order of a Google Pay payment; its 3-D Secure sheet takes the button's layout direction (CONTRACT §18.7). */
+    private fun googlePayOrder(orderId: String, clientSecret: String): GooglePayPayment.Order =
+        GooglePayPayment.Order(orderId, clientSecret, null, rtl = layoutDirection == LAYOUT_DIRECTION_RTL)
 
     /** CONTRACT §17.3 for the loaded [order], with this button's Google Pay launcher, if it has one. */
     private suspend fun decide(order: PayriffClientOrder): GooglePayTransaction? {

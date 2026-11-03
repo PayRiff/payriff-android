@@ -4,7 +4,7 @@ import com.payriff.android.PayriffCardField
 import com.payriff.android.PayriffLanguage
 
 /**
- * Card form and payment view copy in az/en/ru: exactly `vectors/card_strings.json`. The labels, placeholders, the "Card
+ * Card form and payment view copy in az/en/ru/ar: exactly `vectors/card_strings.json`. The labels, placeholders, the "Card
  * information" group label and the payment view's texts follow Payriff's hosted payment page; the field errors come from
  * the web SDK (`fields/i18n.js`). A unit test checks the table. In-code strings keep the AAR free of resources that host
  * apps could accidentally override.
@@ -154,13 +154,60 @@ internal object CardStrings {
                 "orPayByCard" to "Или оплатите картой",
             ),
         ),
+        "ar" to mapOf(
+            "number" to mapOf(
+                "required" to "أدخل رقم البطاقة",
+                "incomplete" to "رقم البطاقة غير مكتمل",
+                "invalid" to "رقم البطاقة غير صحيح",
+                "unsupported" to "نوع البطاقة هذا غير مدعوم",
+            ),
+            "expiry" to mapOf(
+                "required" to "أدخل تاريخ الانتهاء",
+                "incomplete" to "تاريخ الانتهاء غير مكتمل",
+                "invalid" to "تاريخ الانتهاء غير صحيح",
+                "expired" to "انتهت صلاحية هذه البطاقة",
+            ),
+            "cvv" to mapOf(
+                "required" to "أدخل رمز التحقق (CVV)",
+                "incomplete" to "رمز التحقق غير مكتمل",
+                "invalid" to "رمز التحقق غير صحيح",
+            ),
+            "holder" to mapOf(
+                "required" to "أدخل اسم حامل البطاقة",
+                "invalid" to "اسم حامل البطاقة غير صحيح",
+            ),
+            "placeholder" to mapOf(
+                "number" to "1234 1234 1234 1234",
+                "expiry" to "MM / YY",
+                "cvv" to "CVC",
+                "holder" to "اسم حامل البطاقة",
+            ),
+            "label" to mapOf(
+                "number" to "رقم البطاقة",
+                "expiry" to "تاريخ الانتهاء",
+                "cvv" to "رمز التحقق",
+                "holder" to "اسم حامل البطاقة",
+            ),
+            "group" to mapOf(
+                "cardInformation" to "معلومات البطاقة",
+            ),
+            "view" to mapOf(
+                "pay" to "ادفع",
+                "secure" to "دفع آمن وفق PCI DSS",
+                "poweredBy" to "مدعوم من Payriff",
+                "notPayable" to "لا يمكن دفع هذا الطلب بالبطاقة",
+                "deviceNotSupported" to "الدفع بالبطاقة غير متاح على هذا الجهاز لأسباب أمنية",
+                "orPayByCard" to "أو ادفع بالبطاقة",
+            ),
+        ),
     )
 
-    /** The language code of [language] (`az`, `en`, `ru`). */
+    /** The language code of [language] (`az`, `en`, `ru`, `ar`). */
     fun code(language: PayriffLanguage): String = when (language) {
         PayriffLanguage.AZ -> "az"
         PayriffLanguage.EN -> "en"
         PayriffLanguage.RU -> "ru"
+        PayriffLanguage.AR -> "ar"
     }
 
     fun label(language: PayriffLanguage, field: PayriffCardField): String = group(language, "label").getValue(key(field))

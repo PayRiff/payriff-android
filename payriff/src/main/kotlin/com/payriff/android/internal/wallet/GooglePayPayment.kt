@@ -5,6 +5,7 @@ import com.payriff.android.PayriffError
 import com.payriff.android.PayriffErrorCode
 import com.payriff.android.PayriffLanguage
 import com.payriff.android.PayriffResult
+import com.payriff.android.PayriffStrings
 import com.payriff.android.internal.PaymentGuard
 import com.payriff.android.internal.PayriffLog
 import com.payriff.android.internal.card.CardApi
@@ -55,8 +56,17 @@ internal class GooglePayPayment(
     private val clientApi: (CardCredentials) -> CardApi = { CardApiClient(it, Payriff.transport()) },
     private val newIdempotencyKey: () -> String = { UUID.randomUUID().toString() },
 ) {
-    /** An order to pay: its id and `clientSecret`, and the language of the 3-D Secure sheet. */
-    class Order(val orderId: String, val clientSecret: String, val language: PayriffLanguage?) {
+    /**
+     * An order to pay: its id and `clientSecret`, and the language, the texts (CONTRACT §18.6) and the layout direction
+     * (CONTRACT §18.7, `null` when unknown) of the 3-D Secure sheet.
+     */
+    class Order(
+        val orderId: String,
+        val clientSecret: String,
+        val language: PayriffLanguage?,
+        val strings: PayriffStrings? = null,
+        val rtl: Boolean? = null,
+    ) {
         override fun toString(): String = "Order(orderId=$orderId)"
     }
 
@@ -77,7 +87,7 @@ internal class GooglePayPayment(
 
     private enum class Phase { SHEET, PAYING, THREE_DS }
 
-    private class Pending(val flowId: String, val orderId: String, val credentials: CardCredentials, val language: PayriffLanguage?) {
+    private class Pending(val flowId: String, val orderId: String, val credentials: CardCredentials, val order: Order) {
         var phase = Phase.SHEET
         var job: Job? = null
     }
@@ -166,7 +176,7 @@ internal class GooglePayPayment(
     }
 
     private fun pendingFor(order: Order): Pending =
-        Pending(PaymentGuard.newFlowId(), CardSetup.orderId(order.orderId), credentials(order.clientSecret), order.language)
+        Pending(PaymentGuard.newFlowId(), CardSetup.orderId(order.orderId), credentials(order.clientSecret), order)
 
     /** A token that arrived after a recreation: it pays only the order its sheet was opened for, if the owner still shows it. */
     private fun resume(outcome: GooglePayOutcome) {
@@ -240,7 +250,8 @@ internal class GooglePayPayment(
             // /pay accepted: the 3-D Secure sheet runs the next action. It travels in memory, never in the Intent.
             CardHandoffs.put(current.flowId, action)
             try {
-                openThreeDs(CardSheetRequest(current.flowId, current.orderId, current.credentials.clientSecret, current.language))
+                val order = current.order
+                openThreeDs(CardSheetRequest(current.flowId, current.orderId, current.credentials.clientSecret, order.language, order.strings, order.rtl))
                 current.phase = Phase.THREE_DS
             } catch (e: RuntimeException) {
                 CardHandoffs.take(current.flowId)

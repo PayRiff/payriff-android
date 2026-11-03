@@ -23,9 +23,9 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.payriff.android.internal.DeviceIntegrityGuard
 import com.payriff.android.internal.HostApp
+import com.payriff.android.internal.Languages
 import com.payriff.android.internal.PayriffLog
 import com.payriff.android.internal.card.CardFormStyles
-import com.payriff.android.internal.card.CardStrings
 import com.payriff.android.internal.card.LockView
 import com.payriff.android.internal.card.LogoSpan
 import com.payriff.android.internal.card.PayButton
@@ -33,7 +33,10 @@ import com.payriff.android.internal.card.PaymentViewAsset
 import com.payriff.android.internal.card.PaymentViewController
 import com.payriff.android.internal.card.PaymentViewKeys
 import com.payriff.android.internal.card.PaymentViewPlan
+import com.payriff.android.internal.card.ResolvedStrings
 import com.payriff.android.internal.card.ResolvedTextStyle
+import com.payriff.android.internal.card.SquircleDrawable
+import com.payriff.android.internal.card.StringField
 import com.payriff.android.internal.card.applyTextStyle
 import com.payriff.android.internal.wallet.GooglePayAvailability
 import com.payriff.android.internal.wallet.GooglePayButtonStyles
@@ -99,7 +102,11 @@ import kotlin.math.roundToInt
  * secure line's text ([PayriffPaymentViewStyle.payButtonLabel], [PayriffPaymentViewStyle.secureNoteText]), the form's
  * look ([PayriffPaymentViewStyle.formStyle], for example `PayriffCardFormStyle(showLabels = false)`) and the Google Pay
  * row ([PayriffPaymentViewStyle.googlePayButton], [PayriffPaymentViewStyle.walletDividerText],
- * [PayriffPaymentViewStyle.showWalletDivider]). [PayriffCardForm], [PayriffCardPaymentLauncher] and
+ * [PayriffPaymentViewStyle.showWalletDivider]), and the design-system options of CONTRACT §18: the Pay button's whole
+ * text, corner smoothing, disabled colours and badge borders. [strings] replaces any visible text (CONTRACT §18.6). The
+ * view follows the layout direction and is right-to-left in Arabic too (CONTRACT §18.7, §19.3). Three listeners report
+ * a payment's start, a loaded order and an order that did not load ([setOnPaymentStartedListener],
+ * [setOnOrderLoadedListener], [setOnLoadFailedListener]). [PayriffCardForm], [PayriffCardPaymentLauncher] and
  * [PayriffGooglePayButton] remain available to build your own screen.
  */
 public class PayriffPaymentView @JvmOverloads constructor(
@@ -126,6 +133,44 @@ public class PayriffPaymentView @JvmOverloads constructor(
             form.language = value
             applyTexts()
         }
+
+    /**
+     * Your own texts for this view, its form and the 3-D Secure sheet it opens (CONTRACT §18.6). Each one wins over
+     * [PayriffConfig.strings]; what neither sets keeps the built-in text in [language]. `null` (the default) uses
+     * [PayriffConfig.strings] alone.
+     */
+    public var strings: PayriffStrings? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            form.viewStrings = value
+            applyTexts()
+        }
+
+    /** Learns, on the main thread, that a payment of the view starts (CONTRACT §18.5). */
+    public fun interface OnPaymentStartedListener {
+        /**
+         * Called once per attempt, before anything is sent: when Pay is tapped with a valid form ([PayriffPaymentMethod.CARD]),
+         * or when the Google Pay button is tapped, before its sheet opens ([PayriffPaymentMethod.GOOGLE_PAY]).
+         */
+        public fun onPaymentStarted(method: PayriffPaymentMethod)
+    }
+
+    /** Learns, on the main thread, that the view loaded its order (CONTRACT §18.5). */
+    public fun interface OnOrderLoadedListener {
+        /** Called after every successful load of the order, also when it cannot be paid by card. */
+        public fun onOrderLoaded(order: PayriffClientOrder)
+    }
+
+    /** Learns, on the main thread, that the view got no order (CONTRACT §18.5). */
+    public fun interface OnLoadFailedListener {
+        /**
+         * Called when loading the order failed, every time, with the [PayriffError] of [Payriff.retrieveOrder]; and once
+         * per order with [PayriffErrorCode.DEVICE_COMPROMISED] on a compromised device, where the view does not load
+         * the order. A fatal error also goes to [onResultListener], once, after this call.
+         */
+        public fun onLoadFailed(error: PayriffError)
+    }
 
     /**
      * Receives, on the main thread, the result of every payment, card or Google Pay, and, once, a fatal error that ends
@@ -161,9 +206,16 @@ public class PayriffPaymentView @JvmOverloads constructor(
 
     private val waitingResults = ArrayList<PayriffResult>()
     private var night = isNight(resources.configuration)
+    private val badgeFrames = ArrayList<SquircleDrawable>()
+    private var paymentStartedListener: OnPaymentStartedListener? = null
+    private var orderLoadedListener: OnOrderLoadedListener? = null
+    private var loadFailedListener: OnLoadFailedListener? = null
 
-    /** The language and theme the footer was built for; it is built again when either changes. */
-    private var footerLanguage: PayriffLanguage? = null
+    /** Whether the view set itself right-to-left for Arabic (CONTRACT §19.3). */
+    private var arabicLayout = false
+
+    /** The text and theme the footer was built for; it is built again when either changes. */
+    private var footerText: String? = null
     private var footerNight: Boolean? = null
     private var launcher: PayriffCardPaymentLauncher? = null
     private var registry: ActivityResultRegistry? = null
@@ -184,13 +236,16 @@ public class PayriffPaymentView @JvmOverloads constructor(
         // CONTRACT §16.16: a compromised device shows view.deviceNotSupported, keeps Pay off and skips the order load.
         deviceBlock = { DeviceIntegrityGuard.blockReason(context, Payriff.config) },
         decideGooglePay = { order -> decideGooglePay(order) },
+        onPaymentStarted = { method -> paymentStartedListener?.onPaymentStarted(method) },
+        onOrderLoaded = { order -> orderLoadedListener?.onOrderLoaded(order) },
+        onLoadFailed = { error -> loadFailedListener?.onLoadFailed(error) },
     )
 
     /** What a Google Pay payment of the view reports (CONTRACT §17.5, §17.8, §17.9). */
     private val googlePayHost = object : GooglePayPayment.Host {
         override fun resumableOrder(orderId: String): GooglePayPayment.Order? {
             val secret = controller.clientSecret ?: return null
-            return if (orderId == controller.orderId?.trim()) GooglePayPayment.Order(orderId, secret, form.effectiveLanguage()) else null
+            return if (orderId == controller.orderId?.trim()) googlePayOrder(orderId, secret) else null
         }
 
         override fun onResumed(orderId: String) {
@@ -229,6 +284,21 @@ public class PayriffPaymentView @JvmOverloads constructor(
      */
     public fun setOrder(orderId: String, clientSecret: String) {
         controller.setOrder(orderId, clientSecret)
+    }
+
+    /** Sets the listener of the payments' starts (CONTRACT §18.5); `null` removes it. */
+    public fun setOnPaymentStartedListener(listener: OnPaymentStartedListener?) {
+        paymentStartedListener = listener
+    }
+
+    /** Sets the listener of the loaded orders (CONTRACT §18.5); `null` removes it. Set it before [setOrder]. */
+    public fun setOnOrderLoadedListener(listener: OnOrderLoadedListener?) {
+        orderLoadedListener = listener
+    }
+
+    /** Sets the listener of the orders that did not load (CONTRACT §18.5); `null` removes it. Set it before [setOrder]. */
+    public fun setOnLoadFailedListener(listener: OnLoadFailedListener?) {
+        loadFailedListener = listener
     }
 
     override fun onAttachedToWindow() {
@@ -298,8 +368,11 @@ public class PayriffPaymentView @JvmOverloads constructor(
         badges.gravity = Gravity.CENTER_HORIZONTAL
         badges.isBaselineAligned = false
         PaymentViewAsset.BADGES.forEachIndexed { index, asset ->
+            // CONTRACT §18.4: the frameless mark on its frame, drawn in code at the badge's size.
+            val frame = SquircleDrawable()
+            badgeFrames += frame
             badges.addView(
-                image(asset),
+                image(asset).apply { background = frame },
                 LinearLayout.LayoutParams(dp(asset.widthDp), dp(asset.heightDp)).apply {
                     if (index > 0) marginStart = dp(PaymentViewPlan.BADGE_SPACING_DP)
                 },
@@ -340,16 +413,24 @@ public class PayriffPaymentView @JvmOverloads constructor(
         setBackgroundColor(s.backgroundColor ?: if (night) PaymentViewPlan.BACKGROUND_DARK else PaymentViewPlan.BACKGROUND_LIGHT)
         val padding = CardFormStyles.px(s.padding, density())
         column.setPadding(padding, padding, padding, padding)
+        // CONTRACT §18.2, §18.4: the form takes the view's smoothing and badge border colour unless its style sets them.
+        form.defaults = PaymentViewPlan.formDefaults(s)
         form.style = s.formStyle
         val formLook = CardFormStyles.resolve(s.formStyle, night, density())
         // The error line looks like the form's error lines (CONTRACT §16.14: #EC4D3D, #EC5545 in the dark theme).
         errorLine.applyTextStyle(formLook.error)
+        val smoothing = PaymentViewPlan.cornerSmoothing(s)
         payButton.apply(
-            color = s.buttonColor ?: PaymentViewPlan.BUTTON_COLOR,
+            colors = PaymentViewPlan.buttonColors(s),
             text = PaymentViewPlan.buttonText(s),
             minHeightPx = CardFormStyles.px(s.buttonHeight, density()),
             cornerRadiusPx = CardFormStyles.size(s.buttonCornerRadius) * density(),
+            smoothing = smoothing,
         )
+        for (frame in badgeFrames) {
+            frame.setShape(PaymentViewPlan.BADGE_CORNER_RADIUS_DP * density(), smoothing)
+            frame.setStroke(PaymentViewPlan.BADGE_BORDER_DP * density(), PaymentViewPlan.badgeBorderColor(s))
+        }
         val secondary = ResolvedTextStyle(
             size = PaymentViewPlan.SECONDARY_TEXT_SIZE_SP,
             weight = PayriffTextStyle.REGULAR,
@@ -367,20 +448,33 @@ public class PayriffPaymentView @JvmOverloads constructor(
     }
 
     /**
-     * The copy in the effective language (the form's) or the style's own text, and the footer with the logo of the
-     * theme; then the state.
+     * The copy in the effective language (the form's), the app's texts or the style's own text, and the footer with the
+     * logo of the theme; the layout direction of Arabic; then the state.
      */
     private fun applyTexts() {
-        val language = form.effectiveLanguage()
-        val secure = PaymentViewPlan.secureText(language, style)
+        val texts = texts()
+        updateLayoutDirection(texts.language)
+        val secure = PaymentViewPlan.secureText(texts, style)
         if (secureText.text.toString() != secure) secureText.text = secure
-        walletDivider.text = PaymentViewPlan.walletDividerText(language, style)
-        if (language != footerLanguage || night != footerNight) {
-            footerLanguage = language
+        walletDivider.text = PaymentViewPlan.walletDividerText(texts, style)
+        val poweredBy = texts.text(StringField.POWERED_BY)
+        if (poweredBy != footerText || night != footerNight) {
+            footerText = poweredBy
             footerNight = night
-            footer.text = poweredBy(language)
+            footer.text = poweredBy(poweredBy)
         }
         render()
+    }
+
+    /** The view's texts (CONTRACT §18.6): [strings], then [PayriffConfig.strings], then the built-in ones. */
+    private fun texts(): ResolvedStrings = ResolvedStrings(form.effectiveLanguage(), strings, Payriff.config?.strings)
+
+    /** Right-to-left in Arabic (CONTRACT §19.3); otherwise the view follows its parent's layout direction. */
+    private fun updateLayoutDirection(language: PayriffLanguage) {
+        val arabic = Languages.isRightToLeft(language)
+        if (arabic == arabicLayout) return
+        arabicLayout = arabic
+        layoutDirection = if (arabic) LAYOUT_DIRECTION_RTL else LAYOUT_DIRECTION_INHERIT
     }
 
     /**
@@ -389,13 +483,13 @@ public class PayriffPaymentView @JvmOverloads constructor(
      */
     private fun render() {
         val state = controller.state
-        val language = form.effectiveLanguage()
+        val texts = texts()
         state.isFormComplete = form.isComplete
         state.isFormProcessing = form.isProcessing
-        payButton.title = state.payTitle(language, style.payButtonLabel)
+        payButton.title = state.payTitle(texts, style)
         payButton.isBusy = state.isBusy
         payButton.isEnabled = state.isPayEnabled
-        val error = state.errorMessage(language)
+        val error = state.errorMessage(texts)
         // Only a new message: setting the same text again would make TalkBack repeat it.
         if (error != null && errorLine.text.toString() != error) errorLine.text = error
         val showsWallet = state.isGooglePayShown && showGooglePayButton(state.googlePayOffer)
@@ -462,10 +556,14 @@ public class PayriffPaymentView @JvmOverloads constructor(
                 googlePayHost.onFinished(PayriffResult.Failed(PayriffError(PayriffErrorCode.PRESENTATION_FAILED, NO_ACTIVITY_MESSAGE)))
             } else {
                 form.setProcessing(true)
-                current.payment.start(GooglePayPayment.Order(orderId, clientSecret, form.effectiveLanguage()), transaction)
+                current.payment.start(googlePayOrder(orderId, clientSecret), transaction)
             }
         }
     }
+
+    /** The order of a Google Pay payment, with the language, texts and layout direction of its 3-D Secure sheet. */
+    private fun googlePayOrder(orderId: String, clientSecret: String): GooglePayPayment.Order =
+        GooglePayPayment.Order(orderId, clientSecret, form.effectiveLanguage(), strings, layoutDirection == LAYOUT_DIRECTION_RTL)
 
     /** CONTRACT §17.3 for the loaded [order], with this view's Google Pay launcher, if it has one. */
     private suspend fun decideGooglePay(order: PayriffClientOrder): GooglePayTransaction? {
@@ -586,16 +684,16 @@ public class PayriffPaymentView @JvmOverloads constructor(
     }
 
     /**
-     * `view.poweredBy` with the Payriff logo (82×16 dp) in place of "Payriff": `payriff_logo`, or `payriff_logo_dark`
-     * with a light wordmark in the dark theme (CONTRACT §16.14).
+     * The footer, `view.poweredBy` or [PayriffStrings.poweredBy], with the Payriff logo (82×16 dp) in place of its first
+     * "Payriff", or after it and a space when it has none (CONTRACT §18.6): `payriff_logo`, or `payriff_logo_dark` with a
+     * light wordmark in the dark theme (CONTRACT §16.14). The text keeps "Payriff" for accessibility services.
      */
-    private fun poweredBy(language: PayriffLanguage): CharSequence {
-        val text = CardStrings.view(language, CardStrings.VIEW_POWERED_BY)
-        val parts = PaymentViewPlan.poweredByParts(language) ?: return text
+    private fun poweredBy(text: String): CharSequence {
+        val (before, after) = PaymentViewPlan.poweredByParts(text)
         val asset = PaymentViewAsset.logo(night)
         val logo = ContextCompat.getDrawable(context, asset.resId) ?: return text
-        val start = parts.first.length
-        return SpannableString(text).apply {
+        val start = before.length
+        return SpannableString(before + PaymentViewPlan.WORDMARK + after).apply {
             setSpan(LogoSpan(logo, dp(asset.widthDp), dp(asset.heightDp)), start, start + PaymentViewPlan.WORDMARK.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
     }

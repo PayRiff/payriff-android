@@ -181,7 +181,8 @@ public class PayriffCardPaymentLauncher private constructor(
                 // /pay accepted: the 3DS sheet runs the next action. It travels in memory, never in the Intent.
                 CardHandoffs.put(flowId, action)
                 try {
-                    sheet.launch(CardSheetRequest(flowId, id, credentials.clientSecret, language))
+                    // The payment view's texts and the form's layout direction go to the sheet (CONTRACT §18.6, §18.7).
+                    sheet.launch(CardSheetRequest(flowId, id, credentials.clientSecret, language, form.viewStrings, form.isLayoutRtl))
                     current.sheetStarted = true
                 } catch (e: RuntimeException) {
                     CardHandoffs.take(flowId)

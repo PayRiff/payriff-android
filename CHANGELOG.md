@@ -1,3 +1,49 @@
+## [1.0.0-rc.4] - 2026-11-04
+
+Design-system options (CONTRACT revision 8, §18) and Payriff.js 1.3.1 alignment (revision 9, §19). The design options
+are off by default: without them the screens look as in 1.0.0-rc.3. Revision 9 changes the 3-D Secure Method step, and
+adds mada cards and Arabic.
+
+### Added
+
+- `PayriffPaymentViewStyle.payButtonTitle`: the Pay button's whole text in every state, with no amount added. The SDK
+  still charges the order's real amount; showing it to the customer is then up to the app.
+- Corner smoothing (Figma's, as in `figma-squircle`): `PayriffPaymentViewStyle.cornerSmoothing` (default 0) and
+  `PayriffCardFormStyle.cornerSmoothing` (default `null`, the view's value inside it), 0…1, for the fields, the card
+  box, the brand mark box, the Pay button and the badges. 0 keeps the circular corners.
+- `PayriffPaymentViewStyle.buttonDisabledColor` and `buttonDisabledTextColor`: a disabled Pay button at full opacity in
+  these colours; without them it is dimmed to 50% as before.
+- `PayriffPaymentViewStyle.badgeBorderColor` (`#ECEEF0`) for the badges' frames, which the view now draws in code
+  around frameless marks, and `PayriffCardFormStyle.brandMarkBorderColor` (`#D1D1D6`) for the brand mark box.
+- `PayriffStrings`, with `PayriffConfig.strings` (every screen) and `PayriffPaymentView.strings` (the view and its
+  sheets): any visible text of the form, the payment view and the 3-D Secure sheet, and `errorMessages` per
+  `PayriffErrorCode` for the on-screen error lines. `PayriffError.message` in results is unchanged.
+- `PayriffPaymentView.setOnPaymentStartedListener` (`PayriffPaymentMethod`: `CARD`, `APPLE_PAY`, `GOOGLE_PAY`),
+  `setOnOrderLoadedListener` and `setOnLoadFailedListener`.
+- `Payriff.isSupported`, always `true` on Android (minSdk 24).
+- Right-to-left: the form, the view and the 3-D Secure sheet follow the layout direction; the card number, expiry and
+  CVC always read left-to-right, aligned left.
+- `PayriffCardBrand.MADA` (Saudi debit): Payriff.js 1.3.1's 113 BINs, checked first once the whole BIN is typed, so a
+  co-badged Visa or Mastercard card switches to mada at its 6th or 8th digit; mada-only BINs are incomplete, not
+  unsupported, while typed. Its mark is drawn in the usual badge. The payment view's badge row is unchanged.
+- `PayriffLanguage.AR` with Payriff.js 1.3.1's texts. An `ar*` device language gives Arabic, and any language the SDK
+  does not have gives Arabic in `PayriffRegion.SA` (English in `AZ`). Arabic lays the SDK's views and the 3-D Secure
+  sheet out right-to-left.
+
+### Changed
+
+- The 3-D Secure Method step follows Payriff.js 1.3.1: the issuer's hidden page runs only with both its URL and its
+  data; `/three-ds` is asked once the hidden pages have loaded (at most 10 s), waits up to 60 s and retries a network
+  error or an HTTP 5xx once; a `wait` is asked again every 2 s for at most 30 s; anything but a challenge or a redirect
+  then goes to status polling. It replaces the 1 s × 30 loop. A `wait` from `/pay` starts at the 2 s loop.
+- Kotlin code with an exhaustive `when` over `PayriffCardBrand` or `PayriffLanguage` needs the new `MADA` and `AR`
+  branches.
+
+### Removed
+
+- The framed badge images `payriff_badge_visa` and `payriff_badge_mastercard`; the SDK ships the frameless
+  `payriff_badge_visa_mark` and `payriff_badge_mastercard_mark` and draws the frames.
+
 ## [1.0.0-rc.3] - 2026-11-03
 
 Google Pay (CONTRACT revision 7, §17).

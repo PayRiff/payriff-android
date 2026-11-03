@@ -78,12 +78,19 @@ internal object CardFormPlan {
     }
 
     /** The text of [label]: the style's own label, or the copy of `card_strings.json` in [language]. */
-    fun labelText(label: Label, style: PayriffCardFormStyle, language: PayriffLanguage): String = when (label) {
-        Label.HOLDER -> style.holderLabel ?: CardStrings.label(language, PayriffCardField.HOLDER)
-        Label.CARD_INFORMATION -> style.cardLabel ?: CardStrings.cardInformation(language)
-        Label.NUMBER -> CardStrings.label(language, PayriffCardField.NUMBER)
-        Label.EXPIRY -> CardStrings.label(language, PayriffCardField.EXPIRY)
-        Label.CVV -> CardStrings.label(language, PayriffCardField.CVV)
+    fun labelText(label: Label, style: PayriffCardFormStyle, language: PayriffLanguage): String =
+        labelText(label, style, ResolvedStrings(language))
+
+    /**
+     * The text of [label]: the style's own label, else the app's text or the built-in one ([texts], CONTRACT §18.6). The
+     * number, expiry and CVC labels of the stacked layout are their accessibility labels' texts.
+     */
+    fun labelText(label: Label, style: PayriffCardFormStyle, texts: ResolvedStrings): String = when (label) {
+        Label.HOLDER -> style.holderLabel ?: texts.label(PayriffCardField.HOLDER)
+        Label.CARD_INFORMATION -> style.cardLabel ?: texts.cardInformation()
+        Label.NUMBER -> texts.label(PayriffCardField.NUMBER)
+        Label.EXPIRY -> texts.label(PayriffCardField.EXPIRY)
+        Label.CVV -> texts.label(PayriffCardField.CVV)
     }
 
     /** Whether the visible label of [section] names its only field (`labelFor`). */
@@ -95,12 +102,28 @@ internal object CardFormPlan {
      * the section's label.
      */
     fun accessibilityLabel(section: Section, field: PayriffCardField, style: PayriffCardFormStyle, language: PayriffLanguage): String? =
+        accessibilityLabel(section, field, style, ResolvedStrings(language))
+
+    /** [accessibilityLabel] with the app's texts ([texts], CONTRACT §18.6). */
+    fun accessibilityLabel(section: Section, field: PayriffCardField, style: PayriffCardFormStyle, texts: ResolvedStrings): String? =
         when {
             labelNamesField(section, style) -> null
-            section.fields.size == 1 -> labelText(section.label, style, language)
-            else -> CardStrings.label(language, field)
+            section.fields.size == 1 -> labelText(section.label, style, texts)
+            else -> texts.label(field)
         }
+
+    /**
+     * Whether [field] is always left-to-right (CONTRACT §18.7): the card number, the expiry and the CVC, placeholders
+     * included, read and align left in a right-to-left layout too. The cardholder name follows the layout direction.
+     */
+    fun isLeftToRight(field: PayriffCardField): Boolean = field != PayriffCardField.HOLDER
 }
+
+/**
+ * What a card form inside a [com.payriff.android.PayriffPaymentView] takes from the view's style where its own style
+ * leaves it out (CONTRACT §18.2, §18.4): the view's corner smoothing and its badge border colour, for the brand mark box.
+ */
+internal data class FormDefaults(val cornerSmoothing: Float = 0f, @ColorInt val brandMarkBorderColor: Int? = null)
 
 /** A [PayriffTextStyle] merged over its default: every property decided. */
 internal class ResolvedTextStyle(val size: Float, val weight: Int, val typeface: Typeface?, @ColorInt val color: Int)
@@ -124,6 +147,8 @@ internal class ResolvedCardFormStyle(
     val horizontalPaddingPx: Int,
     val labelSpacingPx: Int,
     val sectionSpacingPx: Int,
+    val cornerSmoothing: Float,
+    @ColorInt val brandMarkBorderColor: Int,
 ) {
     /** A section's outline: the error colour while it shows an error, else the focus colour while it has the focus. */
     @ColorInt
@@ -175,9 +200,15 @@ internal object CardFormStyles {
 
     /**
      * Fills in the defaults of [style] for the light or dark ([night]) theme; [density] converts dp to pixels. Each text
-     * style is merged over its default. Negative sizes count as 0.
+     * style is merged over its default. Negative sizes count as 0. Inside a payment view, [defaults] holds what the
+     * view's style gives the form: the corner smoothing and the brand mark box's border colour.
      */
-    fun resolve(style: PayriffCardFormStyle, night: Boolean, density: Float): ResolvedCardFormStyle {
+    fun resolve(
+        style: PayriffCardFormStyle,
+        night: Boolean,
+        density: Float,
+        defaults: FormDefaults = FormDefaults(),
+    ): ResolvedCardFormStyle {
         val error = style.errorColor ?: if (night) ERROR_DARK else ERROR_LIGHT
         return ResolvedCardFormStyle(
             layout = style.layout,
@@ -204,6 +235,10 @@ internal object CardFormStyles {
             horizontalPaddingPx = px(style.horizontalPadding, density),
             labelSpacingPx = px(style.labelSpacing, density),
             sectionSpacingPx = px(style.sectionSpacing, density),
+            // CONTRACT §18.2: the form's own smoothing, else the payment view's, else 0.
+            cornerSmoothing = Squircle.clamp(style.cornerSmoothing ?: defaults.cornerSmoothing),
+            // CONTRACT §18.4: the form's own colour, else the payment view's badge border colour, else #D1D1D6.
+            brandMarkBorderColor = style.brandMarkBorderColor ?: defaults.brandMarkBorderColor ?: BrandMarks.BADGE_STROKE,
         )
     }
 

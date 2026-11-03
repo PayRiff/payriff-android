@@ -1,5 +1,6 @@
 package com.payriff.android.internal.card
 
+import androidx.annotation.ColorInt
 import androidx.annotation.DrawableRes
 import com.payriff.android.PayriffClientOrder
 import com.payriff.android.PayriffLanguage
@@ -51,6 +52,14 @@ internal object PaymentViewPlan {
     /** Between two badges. */
     const val BADGE_SPACING_DP = 8
 
+    /**
+     * The frame drawn in code around each badge's mark (CONTRACT §18.4): a 1 dp stroke inside the badge's bounds, with
+     * an outer corner radius of 4 dp and no fill, in `#ECEEF0` unless the style sets [PayriffPaymentViewStyle.badgeBorderColor].
+     */
+    const val BADGE_BORDER_DP = 1f
+    const val BADGE_CORNER_RADIUS_DP = 4f
+    const val BADGE_BORDER_COLOR = 0xFFECEEF0.toInt()
+
     /** Between the lock and the secure text. */
     const val LOCK_GAP_DP = 6
 
@@ -75,7 +84,7 @@ internal object PaymentViewPlan {
     const val SECONDARY_TEXT_COLOR = 0xFF76787F.toInt()
     const val SECONDARY_TEXT_SIZE_SP = 12f
 
-    /** The Pay button's opacity while disabled, and while pressed. */
+    /** The Pay button's opacity while disabled (without disabled colours, CONTRACT §18.3), and while pressed. */
     const val DISABLED_ALPHA = 0.5f
     const val PRESSED_ALPHA = 0.8f
 
@@ -110,8 +119,22 @@ internal object PaymentViewPlan {
      * the separator, then the currency, for example "Pay 1.02 AZN". Only the word while the amount is unknown. A `null`
      * or blank [label] keeps `view.pay` (CONTRACT §16.14 "Text overrides").
      */
-    fun payTitle(language: PayriffLanguage, order: PayriffClientOrder?, label: String? = null): String {
-        val pay = label?.trim()?.takeIf { it.isNotEmpty() } ?: CardStrings.view(language, CardStrings.VIEW_PAY)
+    fun payTitle(language: PayriffLanguage, order: PayriffClientOrder?, label: String? = null): String =
+        payTitle(ResolvedStrings(language), order, title = null, label = label)
+
+    /** The Pay button's title for [style] (CONTRACT §18.1): see the four-argument [payTitle]. */
+    fun payTitle(texts: ResolvedStrings, order: PayriffClientOrder?, style: PayriffPaymentViewStyle): String =
+        payTitle(texts, order, style.payButtonTitle, style.payButtonLabel)
+
+    /**
+     * The Pay button's title (CONTRACT §18.1, `strings_override.json` → `payButton`): the whole [title], trimmed, when it
+     * is set, with no amount even while it is unknown. Else the word, [label] (trimmed), then
+     * [com.payriff.android.PayriffStrings.pay] and `view.pay` ([texts]), followed by the amount with 2 decimals and the
+     * currency, or alone while the amount is unknown.
+     */
+    fun payTitle(texts: ResolvedStrings, order: PayriffClientOrder?, title: String?, label: String?): String {
+        title?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        val pay = label?.trim()?.takeIf { it.isNotEmpty() } ?: texts.view(CardStrings.VIEW_PAY)
         val amount = order?.amount ?: return pay
         val currency = order.currency?.trim().orEmpty()
         return listOf(pay, amountText(amount), currency).filter { it.isNotEmpty() }.joinToString(" ")
@@ -121,15 +144,71 @@ internal object PaymentViewPlan {
      * The text of the secure line: the style's [PayriffPaymentViewStyle.secureNoteText] as it is, or `view.secure` in
      * [language] when it is `null` or blank (CONTRACT §16.14 "Text overrides").
      */
-    fun secureText(language: PayriffLanguage, style: PayriffPaymentViewStyle): String =
-        style.secureNoteText?.takeIf { it.isNotBlank() } ?: CardStrings.view(language, CardStrings.VIEW_SECURE)
+    fun secureText(language: PayriffLanguage, style: PayriffPaymentViewStyle): String = secureText(ResolvedStrings(language), style)
+
+    /** [secureText] with [com.payriff.android.PayriffStrings.secureNote] under the style's text (CONTRACT §18.6). */
+    fun secureText(texts: ResolvedStrings, style: PayriffPaymentViewStyle): String =
+        style.secureNoteText?.takeIf { it.isNotBlank() } ?: texts.view(CardStrings.VIEW_SECURE)
 
     /**
      * The text of the wallet divider: the style's [PayriffPaymentViewStyle.walletDividerText], trimmed, or
      * `view.orPayByCard` in [language] when it is `null` or blank (CONTRACT §17.9).
      */
     fun walletDividerText(language: PayriffLanguage, style: PayriffPaymentViewStyle): String =
-        style.walletDividerText?.trim()?.takeIf { it.isNotEmpty() } ?: CardStrings.view(language, CardStrings.VIEW_OR_PAY_BY_CARD)
+        walletDividerText(ResolvedStrings(language), style)
+
+    /** [walletDividerText] with [com.payriff.android.PayriffStrings.orPayByCard] under the style's text (CONTRACT §18.6). */
+    fun walletDividerText(texts: ResolvedStrings, style: PayriffPaymentViewStyle): String =
+        style.walletDividerText?.trim()?.takeIf { it.isNotEmpty() } ?: texts.view(CardStrings.VIEW_OR_PAY_BY_CARD)
+
+    /**
+     * The Pay button's colours (CONTRACT §16.14, §18.3): [background] and [text] while enabled; [disabledBackground] and
+     * [disabledText] while disabled when the style sets a disabled colour, else `null` (the enabled colours at 50%).
+     */
+    class ButtonColors(
+        @ColorInt val background: Int,
+        @ColorInt val text: Int,
+        @ColorInt val disabledBackground: Int?,
+        @ColorInt val disabledText: Int?,
+    )
+
+    /** How the Pay button is drawn in one state: its fill, its title's (and spinner's) colour and its opacity. */
+    data class ButtonLook(@ColorInt val background: Int, @ColorInt val text: Int, val alpha: Float)
+
+    /** The Pay button's colours for [style]: see [ButtonColors]. */
+    fun buttonColors(style: PayriffPaymentViewStyle): ButtonColors {
+        val background = style.buttonColor ?: BUTTON_COLOR
+        val text = buttonText(style).color
+        val custom = style.buttonDisabledColor != null || style.buttonDisabledTextColor != null
+        return ButtonColors(
+            background = background,
+            text = text,
+            disabledBackground = if (custom) style.buttonDisabledColor ?: background else null,
+            disabledText = if (custom) style.buttonDisabledTextColor ?: text else null,
+        )
+    }
+
+    /**
+     * The Pay button in a state: [disabled] (also while paying) at full opacity in the disabled colours when the style sets
+     * them, else at 50%; [pressed] at 80%; otherwise as it is (CONTRACT §16.14, §18.3).
+     */
+    fun buttonLook(colors: ButtonColors, disabled: Boolean, pressed: Boolean): ButtonLook = when {
+        disabled && colors.disabledBackground != null && colors.disabledText != null ->
+            ButtonLook(colors.disabledBackground, colors.disabledText, 1f)
+        disabled -> ButtonLook(colors.background, colors.text, DISABLED_ALPHA)
+        pressed -> ButtonLook(colors.background, colors.text, PRESSED_ALPHA)
+        else -> ButtonLook(colors.background, colors.text, 1f)
+    }
+
+    /** The corner smoothing of the Pay button and the badges, 0…1 (CONTRACT §18.2). */
+    fun cornerSmoothing(style: PayriffPaymentViewStyle): Float = Squircle.clamp(style.cornerSmoothing)
+
+    /** The colour of the badges' frames (CONTRACT §18.4). */
+    @ColorInt
+    fun badgeBorderColor(style: PayriffPaymentViewStyle): Int = style.badgeBorderColor ?: BADGE_BORDER_COLOR
+
+    /** What the view's form takes from [style] where its own style leaves it out (CONTRACT §18.2, §18.4). */
+    fun formDefaults(style: PayriffPaymentViewStyle): FormDefaults = FormDefaults(cornerSmoothing(style), style.badgeBorderColor)
 
     /** The Pay button's title style: [PayriffPaymentViewStyle.buttonTextStyle] merged over 16 sp semibold, white. */
     fun buttonText(style: PayriffPaymentViewStyle): ResolvedTextStyle = CardFormStyles.resolveText(
@@ -152,8 +231,16 @@ internal object PaymentViewPlan {
      */
     fun poweredByParts(language: PayriffLanguage): Pair<String, String>? {
         val text = CardStrings.view(language, CardStrings.VIEW_POWERED_BY)
+        return if (WORDMARK in text) poweredByParts(text) else null
+    }
+
+    /**
+     * The footer's [text] split at its first "Payriff", where the logo goes (CONTRACT §18.6, `strings_override.json` →
+     * `poweredBy`). A text without "Payriff" is followed by a space and the logo: ("Secure payment ", "").
+     */
+    fun poweredByParts(text: String): Pair<String, String> {
         val at = text.indexOf(WORDMARK)
-        if (at < 0) return null
+        if (at < 0) return "$text " to ""
         return text.substring(0, at) to text.substring(at + WORDMARK.length)
     }
 }
@@ -198,7 +285,9 @@ internal object LockGlyph {
 
 /**
  * The images of [com.payriff.android.PayriffPaymentView] (CONTRACT §16.14), from `spec/assets/payment-view`: the 1x, 2x
- * and 3x PNGs as `drawable-mdpi`, `-xhdpi` and `-xxhdpi`, and a 1.5x `drawable-hdpi` PNG made from them.
+ * and 3x PNGs as `drawable-mdpi`, `-xhdpi` and `-xxhdpi`, and a 1.5x `drawable-hdpi` PNG made from the 3x one. The
+ * badges are the frameless marks (`visa-mark`, `mastercard-mark`) on the canvas of the old framed badges; the view draws
+ * their frames in code (CONTRACT §18.4).
  *
  * @property resourceName The drawable's name, the same in every density folder.
  * @property widthDp The size in dp (the mdpi file's size in pixels).
@@ -211,8 +300,8 @@ internal enum class PaymentViewAsset(
     val heightDp: Int,
     val accessibilityLabel: String?,
 ) {
-    MASTERCARD(R.drawable.payriff_badge_mastercard, "payriff_badge_mastercard", 43, 28, "Mastercard"),
-    VISA(R.drawable.payriff_badge_visa, "payriff_badge_visa", 42, 28, "Visa"),
+    MASTERCARD(R.drawable.payriff_badge_mastercard_mark, "payriff_badge_mastercard_mark", 43, 28, "Mastercard"),
+    VISA(R.drawable.payriff_badge_visa_mark, "payriff_badge_visa_mark", 42, 28, "Visa"),
 
     /** The "Powered by" logo in the light theme, from the hosted page. */
     LOGO(R.drawable.payriff_logo, "payriff_logo", 82, 16, "Payriff"),

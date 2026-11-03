@@ -728,6 +728,7 @@
         "countryCode": "SA",
         "currencyCode": "SAR",
         "supportedNetworks": [
+          "mada",
           "visa",
           "masterCard"
         ],
@@ -955,5 +956,17 @@
       },
       "description": "types and themes map to ButtonConstants.ButtonType and ButtonConstants.ButtonTheme. automatic: a dark button on a light page, a light button on a dark page."
     }
+  },
+  "applePayNetworks": {
+    "az": [
+      "visa",
+      "masterCard"
+    ],
+    "sa": [
+      "mada",
+      "visa",
+      "masterCard"
+    ],
+    "description": "Revision 9 (§19.4): region sa adds mada (PKPaymentNetwork.mada, which needs countryCode SA). Google Pay keeps VISA and MASTERCARD."
   }
 }

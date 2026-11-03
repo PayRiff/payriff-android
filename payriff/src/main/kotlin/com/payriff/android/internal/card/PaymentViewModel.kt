@@ -5,6 +5,8 @@ import com.payriff.android.PayriffClientOrder
 import com.payriff.android.PayriffError
 import com.payriff.android.PayriffErrorCode
 import com.payriff.android.PayriffLanguage
+import com.payriff.android.PayriffPaymentMethod
+import com.payriff.android.PayriffPaymentViewStyle
 import com.payriff.android.PayriffResult
 import com.payriff.android.internal.wallet.GooglePayAvailability
 import com.payriff.android.internal.wallet.GooglePayTransaction
@@ -90,6 +92,9 @@ internal class PaymentViewState {
      */
     fun payTitle(language: PayriffLanguage, label: String? = null): String = PaymentViewPlan.payTitle(language, loadedOrder, label)
 
+    /** The Pay button's title for [style] with [texts] (CONTRACT §18.1): [PaymentViewPlan.payTitle]. */
+    fun payTitle(texts: ResolvedStrings, style: PayriffPaymentViewStyle): String = PaymentViewPlan.payTitle(texts, loadedOrder, style)
+
     /** Whether the Google Pay button shows above the form: Google Pay is offered and the device was not blocked. */
     val isGooglePayShown: Boolean
         get() = googlePayOffer != null && deviceBlock == null
@@ -120,13 +125,21 @@ internal class PaymentViewState {
      * The error line under the button in [language]: why a payment ended the order, `retrieveOrder`'s error message,
      * or "This order cannot be paid by card" (`view.notPayable`); `null` while the order loads or can be paid.
      */
-    fun errorMessage(language: PayriffLanguage): String? {
+    fun errorMessage(language: PayriffLanguage): String? = errorMessage(ResolvedStrings(language))
+
+    /**
+     * The error line with the app's texts ([texts], CONTRACT §18.6): [com.payriff.android.PayriffStrings.errorMessages]
+     * for the error's code in place of its developer-facing message; for the lines that have a text of their own
+     * (`notPayable`, `deviceNotSupported`), that text first, then the code's entry (`ORDER_NOT_PAYABLE`,
+     * `DEVICE_COMPROMISED`).
+     */
+    fun errorMessage(texts: ResolvedStrings): String? {
         // The device block takes precedence: it is shown while the order never loads (CONTRACT §16.16).
-        if (deviceBlock != null) return PaymentViewPlan.deviceNotSupportedMessage(language)
-        endedBy?.let { return messageOf(it, language) }
+        if (deviceBlock != null) return texts.errorLine(StringField.DEVICE_NOT_SUPPORTED, PayriffErrorCode.DEVICE_COMPROMISED)
+        endedBy?.let { return messageOf(it, texts) }
         return when (val current = order) {
-            is Order.NotPayable -> PaymentViewPlan.notPayableMessage(language)
-            is Order.Failed -> messageOf(current.error, language)
+            is Order.NotPayable -> texts.errorLine(StringField.NOT_PAYABLE, PayriffErrorCode.ORDER_NOT_PAYABLE)
+            is Order.Failed -> messageOf(current.error, texts)
             else -> null
         }
     }
@@ -218,8 +231,8 @@ internal class PaymentViewState {
         isPaying = false
     }
 
-    private fun messageOf(error: PayriffError, language: PayriffLanguage): String =
-        error.message.trim().ifEmpty { PaymentViewPlan.notPayableMessage(language) }
+    private fun messageOf(error: PayriffError, texts: ResolvedStrings): String =
+        texts.errorMessage(error.code) ?: error.message.trim().ifEmpty { texts.view(CardStrings.VIEW_NOT_PAYABLE) }
 }
 
 /**
@@ -232,6 +245,11 @@ internal class PaymentViewState {
  * @param onStateChanged Called after every change of [state], before [deliver].
  * @param decideGooglePay CONTRACT §17.3 for a loaded order ([GooglePayAvailability.decide]): the Google Pay values when
  *   it is offered, else `null`.
+ * @param onPaymentStarted CONTRACT §18.5: once per attempt, when Pay or the Google Pay button starts a payment, before
+ *   anything is sent or the Google Pay sheet opens.
+ * @param onOrderLoaded CONTRACT §18.5: after every successful load of the order, payable by card or not.
+ * @param onLoadFailed CONTRACT §18.5: when the view gets no order: every failed load, and a device block once per
+ *   order (the order is not loaded then). Called before a fatal error goes to [deliver].
  */
 internal class PaymentViewController(
     private val scope: CoroutineScope,
@@ -240,6 +258,9 @@ internal class PaymentViewController(
     private val deliver: (PayriffResult) -> Unit,
     private val deviceBlock: () -> PayriffError? = { null },
     private val decideGooglePay: suspend (PayriffClientOrder) -> GooglePayTransaction? = { null },
+    private val onPaymentStarted: (PayriffPaymentMethod) -> Unit = {},
+    private val onOrderLoaded: (PayriffClientOrder) -> Unit = {},
+    private val onLoadFailed: (PayriffError) -> Unit = {},
 ) {
     val state = PaymentViewState()
 
@@ -280,8 +301,11 @@ internal class PaymentViewController(
             cancelLoad()
             val report = state.deviceDidBlock(blocked)
             onStateChanged()
-            if (report != null) GooglePayAvailability.deviceBlocked(Payriff.config)
-            report?.let(deliver)
+            if (report != null) {
+                GooglePayAvailability.deviceBlocked(Payriff.config)
+                onLoadFailed(blocked)
+                deliver(report)
+            }
             return
         }
         state.deviceDidPass()
@@ -309,6 +333,8 @@ internal class PaymentViewController(
         if (!state.isPayEnabled) return
         state.paymentDidStart()
         onStateChanged()
+        onPaymentStarted(PayriffPaymentMethod.CARD)
+        if (replacedDuring(id, secret)) return
         var done = false
         confirm(id, secret) { result ->
             if (!done) {
@@ -330,7 +356,19 @@ internal class PaymentViewController(
         if (!state.isGooglePayEnabled) return
         state.paymentDidStart()
         onStateChanged()
+        onPaymentStarted(PayriffPaymentMethod.GOOGLE_PAY)
+        if (replacedDuring(id, secret)) return
         start(id, secret, offer)
+    }
+
+    /**
+     * Whether the started-listener set another order than [id] with [secret]: then the payment does not start, and the
+     * view is no longer busy.
+     */
+    private fun replacedDuring(id: String, secret: String): Boolean {
+        if (orderId == id && clientSecret == secret) return false
+        paymentAbandoned()
+        return true
     }
 
     /** A Google Pay payment continues after the activity was recreated: the view is busy until its result. */
@@ -376,6 +414,8 @@ internal class PaymentViewController(
             if (generation != loadGeneration) return@launch
             state.orderDidLoad(loaded)
             onStateChanged()
+            onOrderLoaded(loaded)
+            if (generation != loadGeneration) return@launch
             decideGooglePayNow(loaded, generation)
         }
     }
@@ -401,6 +441,7 @@ internal class PaymentViewController(
     private fun loadFailed(error: PayriffError) {
         val fatal = state.orderDidFail(error)
         onStateChanged()
+        onLoadFailed(error)
         fatal?.let(deliver)
     }
 

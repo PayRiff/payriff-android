@@ -134,6 +134,11 @@ internal interface CardApi {
      * returned it, without `x-secret-key`. [idempotencyKey] is new for every token.
      */
     suspend fun payWithWallet(orderId: String, method: String, token: String, idempotencyKey: String): NextAction
+
+    /**
+     * `GET /three-ds` of the 3-D Secure Method step (CONTRACT §19.1): it waits up to 60 s, because Payriff answers once
+     * the bank does, and a network error or an HTTP 5xx is retried once.
+     */
     suspend fun threeDs(orderId: String): NextAction
     suspend fun status(orderId: String): CardStatus
 }
@@ -144,8 +149,9 @@ internal interface CardApi {
  * - Headers on every request: `X-Public-Key`, `X-Client-Secret`, `X-Client-App-Id` (omitted when unknown) and
  *   `Accept`. `/pay` adds `Content-Type`, `x-secret-key` (cards only, never for a wallet token) and
  *   `X-Idempotency-Key`. Never `Origin`, `X-Parent-Origin` or `Authorization`.
- * - Timeouts: GET 15 s, POST 30 s.
- * - HTTP 429 is retried 3 times after 1 s, 2 s and 4 s; a `/pay` without any response is retried once after 1 s.
+ * - Timeouts: GET 15 s (`/three-ds` 60 s), POST 30 s.
+ * - HTTP 429 is retried 3 times after 1 s, 2 s and 4 s; a `/pay` without any response is retried once after 1 s, and a
+ *   `/three-ds` without any response or with an HTTP 5xx once after 1 s (CONTRACT §19.1).
  *   Retries resend the identical request: the same bytes (the same ciphertext or wallet token) and the same idempotency
  *   key.
  * - Nothing secret is logged: the method, the path ([Urls.redact], so a long order id is shortened) and the HTTP
@@ -181,7 +187,10 @@ internal class CardApiClient(
         }
     }
 
-    override suspend fun threeDs(orderId: String): NextAction = NextAction.parse(call("GET", orderPath(orderId) + "/three-ds", null, null))
+    override suspend fun threeDs(orderId: String): NextAction {
+        val payload = call("GET", orderPath(orderId) + "/three-ds", null, null, THREE_DS_TIMEOUT_MILLIS, Retry.NETWORK_OR_SERVER_ERROR)
+        return NextAction.parse(payload)
+    }
 
     override suspend fun status(orderId: String): CardStatus {
         val payload = call("GET", orderPath(orderId) + "/status", null, null)
@@ -191,7 +200,17 @@ internal class CardApiClient(
     /** The `/pay` headers: the card's `x-secret-key` ([wrappedKey], `null` for a wallet token) and the idempotency key. */
     private class PayHeaders(val wrappedKey: String?, val idempotencyKey: String)
 
-    private suspend fun call(method: String, path: String, body: ByteArray?, pay: PayHeaders?): JSONObject {
+    /** What a call retries once, after 1 s, besides HTTP 429. */
+    private enum class Retry { NONE, NETWORK_ERROR, NETWORK_OR_SERVER_ERROR }
+
+    private suspend fun call(
+        method: String,
+        path: String,
+        body: ByteArray?,
+        pay: PayHeaders?,
+        timeoutMillis: Long = if (method == "POST") POST_TIMEOUT_MILLIS else GET_TIMEOUT_MILLIS,
+        retry: Retry = if (pay != null) Retry.NETWORK_ERROR else Retry.NONE,
+    ): JSONObject {
         val headers = LinkedHashMap<String, String>()
         headers["X-Public-Key"] = credentials.publishableKey
         headers["X-Client-Secret"] = credentials.clientSecret
@@ -202,9 +221,8 @@ internal class CardApiClient(
             pay.wrappedKey?.let { headers["x-secret-key"] = it }
             headers["X-Idempotency-Key"] = pay.idempotencyKey
         }
-        val timeout = if (method == "POST") POST_TIMEOUT_MILLIS else GET_TIMEOUT_MILLIS
-        val request = HttpRequest(method, credentials.host + path, headers, body, timeout.toInt())
-        val response = send(request, timeout, retryNetworkOnce = pay != null)
+        val request = HttpRequest(method, credentials.host + path, headers, body, timeoutMillis.toInt())
+        val response = send(request, timeoutMillis, retry)
         val json = ApiParsing.parseObject(response.body)
         if (response.status in SUCCESS_RANGE && json != null && json.opt("code") == ApiParsing.SUCCESS_CODE) {
             return json.opt("payload") as? JSONObject ?: JSONObject()
@@ -220,9 +238,9 @@ internal class CardApiClient(
      */
     private fun loggedPath(request: HttpRequest): String = Urls.redact(request.url).removePrefix(credentials.host)
 
-    private suspend fun send(request: HttpRequest, timeoutMillis: Long, retryNetworkOnce: Boolean): HttpResponse {
+    private suspend fun send(request: HttpRequest, timeoutMillis: Long, retry: Retry): HttpResponse {
         var rateLimitRetries = 0
-        var networkRetried = false
+        var retried = false
         val path = loggedPath(request)
         while (true) {
             PayriffLog.debug { "${request.method} $path" }
@@ -242,8 +260,8 @@ internal class CardApiClient(
                 throw PayriffError(PayriffErrorCode.UNKNOWN, "The request to Payriff could not be sent (${e.javaClass.simpleName}).")
             }
             if (response == null) {
-                if (retryNetworkOnce && !networkRetried) {
-                    networkRetried = true
+                if (retry != Retry.NONE && !retried) {
+                    retried = true
                     PayriffLog.debug { "No response for ${request.method} $path; retrying once with the same request." }
                     delay(NETWORK_RETRY_DELAY_MILLIS)
                     continue
@@ -256,6 +274,12 @@ internal class CardApiClient(
                 delay(RATE_LIMIT_BACKOFF_MILLIS[rateLimitRetries++])
                 continue
             }
+            if (retry == Retry.NETWORK_OR_SERVER_ERROR && response.status in SERVER_ERROR_RANGE && !retried) {
+                retried = true
+                PayriffLog.debug { "HTTP ${response.status} for ${request.method} $path; retrying once." }
+                delay(NETWORK_RETRY_DELAY_MILLIS)
+                continue
+            }
             return response
         }
     }
@@ -263,6 +287,10 @@ internal class CardApiClient(
     companion object {
         const val GET_TIMEOUT_MILLIS = 15_000L
         const val POST_TIMEOUT_MILLIS = 30_000L
+
+        /** `GET /three-ds` of the 3-D Secure Method step (CONTRACT §19.1, `card_next_action.json` → `threeDsTiming`). */
+        const val THREE_DS_TIMEOUT_MILLIS = 60_000L
+        private val SERVER_ERROR_RANGE = 500..599
         const val NETWORK_RETRY_DELAY_MILLIS = 1_000L
         val RATE_LIMIT_BACKOFF_MILLIS = listOf(1_000L, 2_000L, 4_000L)
         private const val HTTP_TOO_MANY_REQUESTS = 429

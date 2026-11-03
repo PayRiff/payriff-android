@@ -33,16 +33,40 @@ internal class ExpiryCheck(val valid: Boolean, val empty: Boolean, val errorCode
 internal class FieldUiState(val focused: Boolean, val touched: Boolean, val submitted: Boolean)
 
 /**
- * Card field validation, ported 1:1 from the web SDK (`fields/validation.js`, Payriff.js 1.2.4). Pure functions.
- * Prefix ranges are compared as equal-length digit strings, which decides "could still become this brand" from a
- * partial number. One deliberate difference (CONTRACT §16.4, owner decision 2026-10-21): card numbers have at most
- * 16 digits for every brand, so Visa's 19-digit length is not accepted (the web SDK allows it).
+ * Card field validation, ported 1:1 from the web SDK (`fields/validation.js`, Payriff.js 1.2.4, with mada from 1.3.1).
+ * Pure functions. Prefix ranges are compared as equal-length digit strings, which decides "could still become this
+ * brand" from a partial number, so a mada-only BIN that is still being typed is incomplete, not unsupported. One
+ * deliberate difference (CONTRACT §16.4, owner decision 2026-10-21): card numbers have at most 16 digits for every
+ * brand, so Visa's 19-digit length is not accepted (the web SDK allows it).
  */
 internal object CardValidation {
 
     class Brand(val brand: PayriffCardBrand, val ranges: List<Pair<String, String>>, val lengths: List<Int>)
 
+    /**
+     * The mada BINs (CONTRACT §19.2, `card_validation.json` → `madaBins`): Payriff.js 1.3.1 `MADA_BINS`, each an exact
+     * 6- or 8-digit prefix of a 16-digit card. Co-badged Visa and Mastercard BINs are among them.
+     */
+    val MADA_BINS: List<String> = listOf(
+        "22337902", "22337986", "22402030", "40177800", "403024", "40545400", "406136", "406996", "40719700",
+        "40739500", "407520", "409201", "410621", "410685", "410834", "412565", "417633", "419593", "420132", "421141",
+        "42222200", "422817", "422818", "422819", "428331", "428671", "428672", "428673", "431361", "432328", "434107",
+        "439954", "440533", "440647", "440795", "442463", "445564", "446393", "446404", "446672", "45488707",
+        "45488713", "455036", "455708", "457865", "457997", "458456", "462220", "468540", "468541", "468542", "468543",
+        "474491", "483010", "483011", "483012", "484783", "486094", "486095", "486096", "489317", "489318", "489319",
+        "49098000", "49098001", "492464", "504300", "513213", "515079", "516138", "520058", "521076", "524130",
+        "524514", "524940", "529415", "529741", "530060", "530906", "531095", "531196", "532013", "535825", "535989",
+        "536023", "537767", "539931", "543085", "543357", "549760", "554180", "555610", "558563", "588845", "588848",
+        "588850", "588982", "588983", "589005", "589206", "604906", "605141", "636120", "968201", "968202", "968203",
+        "968204", "968205", "968206", "968207", "968208", "968209", "968211",
+    )
+
+    /**
+     * The accepted brands in the order they are checked. mada comes first and needs its whole BIN typed, so a co-badged
+     * card shows Visa or Mastercard until then and mada from its 6th or 8th digit (CONTRACT §19.2).
+     */
     val BRANDS: List<Brand> = listOf(
+        Brand(PayriffCardBrand.MADA, MADA_BINS.map { it to it }, listOf(16)),
         Brand(PayriffCardBrand.VISA, listOf("4" to "4"), listOf(16)),
         Brand(PayriffCardBrand.MASTERCARD, listOf("51" to "55", "2221" to "2720"), listOf(16)),
     )

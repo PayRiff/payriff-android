@@ -1,5 +1,5 @@
 {
-  "description": "Classify a /pay or /three-ds payload into the SDK's next step. See CONTRACT.md §16.7. Every URL must be absolute https; otherwise the type is invalid (the payment ends as failed(UNEXPECTED_RESPONSE) after a single status check). clientRequest keeps only entries whose key is a string and whose value is a string or null; null becomes an empty string in the challenge form.",
+  "description": "Classify a /pay or /three-ds payload into the SDK's next step. See CONTRACT.md §16.7. Every URL must be absolute https; otherwise the type is invalid (the payment ends as failed(UNEXPECTED_RESPONSE) after a single status check). clientRequest keeps only entries whose key is a string and whose value is a string or null; null becomes an empty string in the challenge form. methodSteps, threeDsTiming and afterMethod: revision 9 (§19.1), from Payriff.js 1.3.1.",
   "cases": [
     {
       "name": "challenge with accessUrl and creq",
@@ -254,6 +254,93 @@
       "expected": {
         "type": "invalid"
       }
+    }
+  ],
+  "methodSteps": [
+    {
+      "name": "url and data: issuer step; server url: server step",
+      "clientRequest": {
+        "threeDSMethodUrl": "https://acs.bank.example/method",
+        "threeDSMethodData": "eyJ0In0",
+        "threeDSMethodUrlServer": "https://3ds.bank.example/gather"
+      },
+      "expect": {
+        "issuer": true,
+        "server": true
+      }
+    },
+    {
+      "name": "url without data: no issuer step",
+      "clientRequest": {
+        "threeDSMethodUrl": "https://acs.bank.example/method",
+        "threeDSMethodData": "",
+        "threeDSMethodUrlServer": null
+      },
+      "expect": {
+        "issuer": false,
+        "server": false
+      }
+    },
+    {
+      "name": "data without url: no issuer step",
+      "clientRequest": {
+        "threeDSMethodUrl": "",
+        "threeDSMethodData": "eyJ0In0",
+        "threeDSMethodUrlServer": "https://3ds.bank.example/gather"
+      },
+      "expect": {
+        "issuer": false,
+        "server": true
+      }
+    },
+    {
+      "name": "nothing: straight to /three-ds",
+      "clientRequest": {},
+      "expect": {
+        "issuer": false,
+        "server": false
+      }
+    }
+  ],
+  "threeDsTiming": {
+    "methodLoadTimeoutSeconds": 10,
+    "threeDsRequestTimeoutSeconds": 60,
+    "threeDsRetries": 1,
+    "waitIntervalSeconds": 2,
+    "waitLimitSeconds": 30
+  },
+  "afterMethod": [
+    {
+      "result": "challenge",
+      "then": "challenge"
+    },
+    {
+      "result": "redirect",
+      "then": "redirect"
+    },
+    {
+      "result": "challengeWithoutAccessUrl",
+      "then": "statusPolling"
+    },
+    {
+      "result": "method",
+      "then": "statusPolling"
+    },
+    {
+      "result": "checkStatus",
+      "then": "statusPolling"
+    },
+    {
+      "result": "waitAfterLimit",
+      "then": "statusPolling"
+    },
+    {
+      "result": "invalid",
+      "then": "statusPolling"
+    },
+    {
+      "result": "errorAfterRetry",
+      "then": "statusPolling"
     }
   ]
 }

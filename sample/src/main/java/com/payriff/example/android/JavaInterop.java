@@ -13,6 +13,7 @@ import com.payriff.android.PayriffClientOrder;
 import com.payriff.android.PayriffConfig;
 import com.payriff.android.PayriffEnvironment;
 import com.payriff.android.PayriffError;
+import com.payriff.android.PayriffErrorCode;
 import com.payriff.android.PayriffLanguage;
 import com.payriff.android.PayriffLogger;
 import com.payriff.android.PayriffPayment;
@@ -21,6 +22,7 @@ import com.payriff.android.PayriffPaymentView;
 import com.payriff.android.PayriffPaymentViewStyle;
 import com.payriff.android.PayriffRegion;
 import com.payriff.android.PayriffResult;
+import com.payriff.android.PayriffStrings;
 import com.payriff.android.PayriffTextStyle;
 
 /**
@@ -71,6 +73,33 @@ final class JavaInterop {
             }
         });
         paymentView.setOrder(orderId, clientSecret);
+    }
+
+    /**
+     * The design-system options (CONTRACT §18): the whole Pay button text, corner smoothing, disabled colours, badge
+     * borders, your own texts and the view's callbacks. Every option is off by default.
+     */
+    static void matchYourDesign(PayriffPaymentView paymentView) {
+        PayriffStrings strings = new PayriffStrings.Builder()
+                .pay("Öde")
+                .numberInvalid("Kart numarası geçersiz")
+                .errorMessage(PayriffErrorCode.NETWORK_ERROR, "İnternet bağlantısı yok")
+                .build();
+        Payriff.configure(new PayriffConfig.Builder().publishableKey("pr_pk_live_your_key").strings(strings).build());
+        paymentView.setStyle(new PayriffPaymentViewStyle.Builder()
+                // You show the customer the amount that is really charged.
+                .payButtonTitle("Pay €12")
+                .cornerSmoothing(0.6f)
+                .buttonDisabledColor(0xFFE5E5EA)
+                .buttonDisabledTextColor(0xFF8E8E93)
+                .badgeBorderColor(0xFFD1D1D6)
+                .formStyle(new PayriffCardFormStyle.Builder().cornerSmoothing(0.6f).brandMarkBorderColor(0xFFD1D1D6).build())
+                .build());
+        paymentView.setStrings(strings.newBuilder().sheetTitle("Ödeme").build());
+        paymentView.setOnPaymentStartedListener(method -> android.util.Log.i("JavaInterop", "started " + method));
+        paymentView.setOnOrderLoadedListener(order -> android.util.Log.i("JavaInterop", "loaded " + order.getOrderId()));
+        paymentView.setOnLoadFailedListener(error -> android.util.Log.w("JavaInterop", "no order: " + error.getCode()));
+        android.util.Log.i("JavaInterop", "supported: " + Payriff.isSupported());
     }
 
     /** Create the launcher in onCreate; the callback receives a result that arrives after a recreation. */

@@ -1,0 +1,362 @@
+{
+  "description": "PayriffStrings (CONTRACT §18.6): every field is optional and replaces the built-in text of its key (card_strings.json or strings.json) in every language. dialogOk and dialogCancel are used only where the SDK draws JavaScript dialogs itself (Flutter on iOS). errorMessages maps a PayriffErrorCode to the text of an on-screen error line; PayriffError.message is unchanged.",
+  "fields": [
+    {
+      "field": "holderLabel",
+      "source": "card_strings",
+      "key": "label.holder"
+    },
+    {
+      "field": "cardInformationLabel",
+      "source": "card_strings",
+      "key": "group.cardInformation"
+    },
+    {
+      "field": "numberAccessibilityLabel",
+      "source": "card_strings",
+      "key": "label.number"
+    },
+    {
+      "field": "expiryAccessibilityLabel",
+      "source": "card_strings",
+      "key": "label.expiry"
+    },
+    {
+      "field": "cvcAccessibilityLabel",
+      "source": "card_strings",
+      "key": "label.cvv"
+    },
+    {
+      "field": "holderPlaceholder",
+      "source": "card_strings",
+      "key": "placeholder.holder"
+    },
+    {
+      "field": "numberPlaceholder",
+      "source": "card_strings",
+      "key": "placeholder.number"
+    },
+    {
+      "field": "expiryPlaceholder",
+      "source": "card_strings",
+      "key": "placeholder.expiry"
+    },
+    {
+      "field": "cvcPlaceholder",
+      "source": "card_strings",
+      "key": "placeholder.cvv"
+    },
+    {
+      "field": "numberRequired",
+      "source": "card_strings",
+      "key": "number.required"
+    },
+    {
+      "field": "numberIncomplete",
+      "source": "card_strings",
+      "key": "number.incomplete"
+    },
+    {
+      "field": "numberInvalid",
+      "source": "card_strings",
+      "key": "number.invalid"
+    },
+    {
+      "field": "numberUnsupported",
+      "source": "card_strings",
+      "key": "number.unsupported"
+    },
+    {
+      "field": "expiryRequired",
+      "source": "card_strings",
+      "key": "expiry.required"
+    },
+    {
+      "field": "expiryIncomplete",
+      "source": "card_strings",
+      "key": "expiry.incomplete"
+    },
+    {
+      "field": "expiryInvalid",
+      "source": "card_strings",
+      "key": "expiry.invalid"
+    },
+    {
+      "field": "expiryExpired",
+      "source": "card_strings",
+      "key": "expiry.expired"
+    },
+    {
+      "field": "cvcRequired",
+      "source": "card_strings",
+      "key": "cvv.required"
+    },
+    {
+      "field": "cvcIncomplete",
+      "source": "card_strings",
+      "key": "cvv.incomplete"
+    },
+    {
+      "field": "cvcInvalid",
+      "source": "card_strings",
+      "key": "cvv.invalid"
+    },
+    {
+      "field": "holderRequired",
+      "source": "card_strings",
+      "key": "holder.required"
+    },
+    {
+      "field": "holderInvalid",
+      "source": "card_strings",
+      "key": "holder.invalid"
+    },
+    {
+      "field": "pay",
+      "source": "card_strings",
+      "key": "view.pay"
+    },
+    {
+      "field": "secureNote",
+      "source": "card_strings",
+      "key": "view.secure"
+    },
+    {
+      "field": "poweredBy",
+      "source": "card_strings",
+      "key": "view.poweredBy"
+    },
+    {
+      "field": "orPayByCard",
+      "source": "card_strings",
+      "key": "view.orPayByCard"
+    },
+    {
+      "field": "notPayable",
+      "source": "card_strings",
+      "key": "view.notPayable"
+    },
+    {
+      "field": "deviceNotSupported",
+      "source": "card_strings",
+      "key": "view.deviceNotSupported"
+    },
+    {
+      "field": "sheetTitle",
+      "source": "strings",
+      "key": "title"
+    },
+    {
+      "field": "verifying",
+      "source": "strings",
+      "key": "verifying"
+    },
+    {
+      "field": "close",
+      "source": "strings",
+      "key": "close"
+    },
+    {
+      "field": "retry",
+      "source": "strings",
+      "key": "retry"
+    },
+    {
+      "field": "closeConfirmTitle",
+      "source": "strings",
+      "key": "cancel_confirm_title"
+    },
+    {
+      "field": "closeConfirmMessage",
+      "source": "strings",
+      "key": "cancel_confirm_message"
+    },
+    {
+      "field": "closeConfirmClose",
+      "source": "strings",
+      "key": "cancel_confirm_yes"
+    },
+    {
+      "field": "closeConfirmContinue",
+      "source": "strings",
+      "key": "cancel_confirm_no"
+    },
+    {
+      "field": "pageLoadError",
+      "source": "strings",
+      "key": "page_load_error"
+    },
+    {
+      "field": "dialogOk",
+      "source": "strings",
+      "key": "dialog_ok"
+    },
+    {
+      "field": "dialogCancel",
+      "source": "strings",
+      "key": "dialog_cancel"
+    }
+  ],
+  "resolution": [
+    {
+      "name": "the view's strings win over the config's",
+      "view": {
+        "pay": "Ödə"
+      },
+      "config": {
+        "pay": "Pay now"
+      },
+      "language": "en",
+      "field": "pay",
+      "expect": "Ödə"
+    },
+    {
+      "name": "a blank value counts as not set",
+      "view": {
+        "pay": "   "
+      },
+      "config": {
+        "pay": "Pay now"
+      },
+      "language": "en",
+      "field": "pay",
+      "expect": "Pay now"
+    },
+    {
+      "name": "nothing set: the built-in text of the language",
+      "view": {},
+      "config": {},
+      "language": "ru",
+      "field": "pay",
+      "expect": "Оплатить"
+    },
+    {
+      "name": "a field error from the config",
+      "view": {},
+      "config": {
+        "numberInvalid": "Kart numarası geçersiz"
+      },
+      "language": "az",
+      "field": "numberInvalid",
+      "expect": "Kart numarası geçersiz"
+    },
+    {
+      "name": "a 3DS sheet text from the config",
+      "view": {},
+      "config": {
+        "closeConfirmContinue": "Ödemeye devam et"
+      },
+      "language": "en",
+      "field": "closeConfirmContinue",
+      "expect": "Ödemeye devam et"
+    },
+    {
+      "name": "values are used as given, not trimmed",
+      "view": {
+        "sheetTitle": " Ödeme "
+      },
+      "config": {},
+      "language": "en",
+      "field": "sheetTitle",
+      "expect": " Ödeme "
+    }
+  ],
+  "payButton": [
+    {
+      "name": "payButtonTitle is the whole text",
+      "style": {
+        "payButtonTitle": "Ödə €12",
+        "payButtonLabel": "Buy"
+      },
+      "strings": {
+        "pay": "Öde"
+      },
+      "amount": 23.45,
+      "currency": "AZN",
+      "expect": "Ödə €12"
+    },
+    {
+      "name": "payButtonTitle while the amount is unknown",
+      "style": {
+        "payButtonTitle": "Ödə €12"
+      },
+      "strings": {},
+      "amount": null,
+      "currency": null,
+      "expect": "Ödə €12"
+    },
+    {
+      "name": "a blank payButtonTitle counts as not set",
+      "style": {
+        "payButtonTitle": "  "
+      },
+      "strings": {},
+      "language": "en",
+      "amount": 10.5,
+      "currency": "AZN",
+      "expect": "Pay 10.50 AZN"
+    },
+    {
+      "name": "payButtonLabel wins over strings.pay",
+      "style": {
+        "payButtonLabel": "Buy"
+      },
+      "strings": {
+        "pay": "Öde"
+      },
+      "amount": 10.5,
+      "currency": "AZN",
+      "expect": "Buy 10.50 AZN"
+    },
+    {
+      "name": "strings.pay with the amount",
+      "style": {},
+      "strings": {
+        "pay": "Öde"
+      },
+      "amount": 10.5,
+      "currency": "AZN",
+      "expect": "Öde 10.50 AZN"
+    },
+    {
+      "name": "strings.pay alone while the amount is unknown",
+      "style": {},
+      "strings": {
+        "pay": "Öde"
+      },
+      "amount": null,
+      "currency": null,
+      "expect": "Öde"
+    }
+  ],
+  "poweredBy": [
+    {
+      "text": "Powered by Payriff",
+      "expect": {
+        "before": "Powered by ",
+        "after": ""
+      }
+    },
+    {
+      "text": "Payriff tərəfindən hazırlanıb",
+      "expect": {
+        "before": "",
+        "after": " tərəfindən hazırlanıb"
+      }
+    },
+    {
+      "text": "Payriff ile güvenli ödeme",
+      "expect": {
+        "before": "",
+        "after": " ile güvenli ödeme"
+      }
+    },
+    {
+      "text": "Güvenli ödeme",
+      "expect": {
+        "before": "Güvenli ödeme ",
+        "after": ""
+      }
+    }
+  ]
+}

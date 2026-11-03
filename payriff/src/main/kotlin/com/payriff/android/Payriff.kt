@@ -61,6 +61,15 @@ public object Payriff {
     public val isPaymentInProgress: Boolean
         get() = PaymentGuard.isBusy()
 
+    /**
+     * Whether this device can run the SDK's payments (CONTRACT §18.8), so the app can offer another way to pay where it
+     * cannot. Always `true`: the SDK requires Android 7.0 (API 24), its `minSdk`. Whether a compromised device may pay is
+     * a separate check, [isDeviceCompromised].
+     */
+    @JvmStatic
+    public val isSupported: Boolean
+        get() = true
+
     /** The configuration passed to the last [configure] call, or `null` if [configure] was never called. */
     @JvmStatic
     public val config: PayriffConfig?

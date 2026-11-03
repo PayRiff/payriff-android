@@ -16,16 +16,25 @@ internal sealed class NextAction {
         override fun toString(): String = "Challenge(url=${Urls.redact(url)}, fields=${form.size})"
     }
 
-    /** 3DS Method: POST `threeDSMethodData` to [methodUrl] and an empty POST to [methodUrlServer], each when set. */
+    /**
+     * 3DS Method (CONTRACT §19.1): POST `threeDSMethodData` to [methodUrl] when both are set ([runsIssuer]), and an empty
+     * POST to [methodUrlServer] when it is set ([runsServer]). A `THREE_DS` answer without `accessUrl` is one.
+     */
     class Method(val methodUrl: String?, val methodData: String?, val methodUrlServer: String?) : NextAction() {
+        /** Hidden WebView 1, the issuer's ACS: only with both the URL and the data (`''` counts as missing). */
+        val runsIssuer: Boolean get() = methodUrl != null && !methodData.isNullOrEmpty()
+
+        /** Hidden WebView 2, the 3DS Server. */
+        val runsServer: Boolean get() = methodUrlServer != null
+
         /** Whether there is a hidden POST to make. */
-        val hasWork: Boolean get() = methodUrl != null || methodUrlServer != null
+        val hasWork: Boolean get() = runsIssuer || runsServer
 
         override fun toString(): String =
             "Method(methodUrl=${methodUrl?.let(Urls::redact)}, methodUrlServer=${methodUrlServer?.let(Urls::redact)})"
     }
 
-    /** Wait a second, then ask `/three-ds` again. */
+    /** Ask `/three-ds` again in 2 s, for at most 30 s (CONTRACT §19.1). */
     object Wait : NextAction() {
         override fun toString(): String = "Wait"
     }

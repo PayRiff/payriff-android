@@ -1,115 +1,137 @@
 {
-  "description": "UI copy for the SDK sheet. See CONTRACT.md §9-§10. Use these exact strings. The language is the effective payment language (AZ/EN/RU -> az/en/ru). dialog_ok and dialog_cancel label JavaScript alert/confirm/prompt dialogs where the SDK renders them itself (§10).",
+  "description": "UI copy for the SDK sheet. See CONTRACT.md §9-§10. Use these exact strings. The language is the effective payment language (AZ/EN/RU -> az/en/ru). dialog_ok and dialog_cancel label JavaScript alert/confirm/prompt dialogs where the SDK renders them itself (§10). ar added in revision 9 (§19.3).",
   "strings": {
     "title": {
       "az": "Ödəniş",
       "en": "Payment",
-      "ru": "Оплата"
+      "ru": "Оплата",
+      "ar": "الدفع"
     },
     "secure_payment": {
       "az": "Təhlükəsiz ödəniş",
       "en": "Secure payment",
-      "ru": "Безопасная оплата"
+      "ru": "Безопасная оплата",
+      "ar": "دفع آمن"
     },
     "creating_order": {
       "az": "Ödəniş hazırlanır…",
       "en": "Preparing payment…",
-      "ru": "Подготовка платежа…"
+      "ru": "Подготовка платежа…",
+      "ar": "جارٍ تجهيز الدفع…"
     },
     "verifying": {
       "az": "Ödəniş yoxlanılır…",
       "en": "Checking payment…",
-      "ru": "Проверяем платёж…"
+      "ru": "Проверяем платёж…",
+      "ar": "جارٍ التحقق من الدفع…"
     },
     "close": {
       "az": "Bağla",
       "en": "Close",
-      "ru": "Закрыть"
+      "ru": "Закрыть",
+      "ar": "إغلاق"
     },
     "retry": {
       "az": "Yenidən cəhd et",
       "en": "Try again",
-      "ru": "Повторить"
+      "ru": "Повторить",
+      "ar": "إعادة المحاولة"
     },
     "cancel_confirm_title": {
       "az": "Pəncərəni bağlayaq?",
       "en": "Close this window?",
-      "ru": "Закрыть окно?"
+      "ru": "Закрыть окно?",
+      "ar": "إغلاق هذه النافذة؟"
     },
     "cancel_confirm_message": {
       "az": "Ödəniş hələ tamamlanmayıb. Pəncərəni bağlasanız, ödənişin statusunu yoxlayacağıq.",
       "en": "The payment isn't finished yet. If you close this window, we'll check its status.",
-      "ru": "Оплата ещё не завершена. Если закрыть окно, мы проверим её статус."
+      "ru": "Оплата ещё не завершена. Если закрыть окно, мы проверим её статус.",
+      "ar": "لم يكتمل الدفع بعد. إذا أغلقت هذه النافذة، فسنتحقق من حالته."
     },
     "cancel_confirm_yes": {
       "az": "Bağla",
       "en": "Close",
-      "ru": "Закрыть"
+      "ru": "Закрыть",
+      "ar": "إغلاق"
     },
     "cancel_confirm_no": {
       "az": "Ödənişə davam et",
       "en": "Continue payment",
-      "ru": "Продолжить оплату"
+      "ru": "Продолжить оплату",
+      "ar": "متابعة الدفع"
     },
     "result_success_title": {
       "az": "Ödəniş uğurla tamamlandı",
       "en": "Payment successful",
-      "ru": "Оплата прошла успешно"
+      "ru": "Оплата прошла успешно",
+      "ar": "تم الدفع بنجاح"
     },
     "result_success_message": {
       "az": "Təşəkkür edirik!",
       "en": "Thank you!",
-      "ru": "Спасибо!"
+      "ru": "Спасибо!",
+      "ar": "شكرًا لك!"
     },
     "result_declined_title": {
       "az": "Ödəniş rədd edildi",
       "en": "Payment declined",
-      "ru": "Платёж отклонён"
+      "ru": "Платёж отклонён",
+      "ar": "تم رفض الدفع"
     },
     "result_declined_message": {
       "az": "Kartınızdan vəsait çıxılmadı. Başqa kartla yenidən cəhd edin.",
       "en": "Your card was not charged. Please try again with another card.",
-      "ru": "Средства не списаны. Попробуйте другую карту."
+      "ru": "Средства не списаны. Попробуйте другую карту.",
+      "ar": "لم يُخصم أي مبلغ من بطاقتك. يرجى المحاولة مرة أخرى ببطاقة أخرى."
     },
     "result_cancelled_title": {
       "az": "Ödəniş ləğv edildi",
       "en": "Payment cancelled",
-      "ru": "Оплата отменена"
+      "ru": "Оплата отменена",
+      "ar": "تم إلغاء الدفع"
     },
     "result_cancelled_message": {
       "az": "Ödəniş tamamlanmadı.",
       "en": "The payment was not completed.",
-      "ru": "Оплата не была завершена."
+      "ru": "Оплата не была завершена.",
+      "ar": "لم يكتمل الدفع."
     },
     "result_pending_title": {
       "az": "Ödəniş emal olunur",
       "en": "Payment is processing",
-      "ru": "Платёж обрабатывается"
+      "ru": "Платёж обрабатывается",
+      "ar": "جارٍ معالجة الدفع"
     },
     "result_pending_message": {
       "az": "Ödənişin statusunu hələ təsdiqləyə bilmədik. Bir az sonra yenidən yoxlayın.",
       "en": "We couldn't confirm the payment status yet. Please check again shortly.",
-      "ru": "Мы пока не смогли подтвердить статус платежа. Проверьте немного позже."
+      "ru": "Мы пока не смогли подтвердить статус платежа. Проверьте немного позже.",
+      "ar": "لم نتمكن من تأكيد حالة الدفع بعد. يرجى التحقق مرة أخرى بعد قليل."
     },
     "error_title": {
       "az": "Ödənişi başlatmaq mümkün olmadı",
       "en": "Couldn't start the payment",
-      "ru": "Не удалось начать оплату"
+      "ru": "Не удалось начать оплату",
+      "ar": "تعذّر بدء الدفع"
     },
     "page_load_error": {
       "az": "Səhifə yüklənmədi. İnternet bağlantınızı yoxlayın.",
       "en": "The page couldn't be loaded. Check your internet connection.",
-      "ru": "Не удалось загрузить страницу. Проверьте подключение к интернету."
+      "ru": "Не удалось загрузить страницу. Проверьте подключение к интернету.",
+      "ar": "تعذّر تحميل الصفحة. تحقّق من اتصالك بالإنترنت."
     },
     "dialog_ok": {
       "az": "OK",
       "en": "OK",
-      "ru": "ОК"
+      "ru": "ОК",
+      "ar": "حسنًا"
     },
     "dialog_cancel": {
       "az": "İmtina",
       "en": "Cancel",
-      "ru": "Отмена"
+      "ru": "Отмена",
+      "ar": "إلغاء"
     }
   }
 }

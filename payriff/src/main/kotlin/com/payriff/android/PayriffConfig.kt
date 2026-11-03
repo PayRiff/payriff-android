@@ -41,6 +41,10 @@ import com.payriff.android.internal.card.ClientApiHosts
  *   [PayriffGooglePayConfig]. `null` (the default): Google Pay is never offered. It is offered for an order that lists
  *   `GOOGLE_PAY` with its gateway, on a device that is not compromised and can pay with Google Pay. The Google Pay
  *   environment is `TEST` with the sandbox host (`https://sb-api.payriff.com`) and `PRODUCTION` otherwise.
+ * @property strings Your own texts for every screen of the SDK (CONTRACT §18.6): the card form, [PayriffPaymentView]
+ *   and the 3-D Secure sheet, also the one [PayriffCardPaymentLauncher] opens. `null` (the default) keeps the built-in
+ *   texts in [language]. [PayriffPaymentView.strings] wins over it in that view and the sheets it opens. It is not part
+ *   of [toString].
  */
 public class PayriffConfig(
     publishableKey: String? = null,
@@ -51,6 +55,7 @@ public class PayriffConfig(
     public val allowScreenCaptureInDebug: Boolean = false,
     public val allowCompromisedDevices: Boolean = false,
     public val googlePay: PayriffGooglePayConfig? = null,
+    public val strings: PayriffStrings? = null,
 ) {
     /**
      * Publishable key (`pr_pk_live_…`) of the card flow ([PayriffCardForm], [PayriffCardPaymentLauncher],
@@ -82,6 +87,7 @@ public class PayriffConfig(
         .allowScreenCaptureInDebug(allowScreenCaptureInDebug)
         .allowCompromisedDevices(allowCompromisedDevices)
         .googlePay(googlePay)
+        .strings(strings)
 
     /**
      * Describes the configuration with the publishable key redacted as `pr_pk_live_***(<length>)`, so it is safe to log.
@@ -102,6 +108,7 @@ public class PayriffConfig(
         private var allowScreenCaptureInDebug: Boolean = false
         private var allowCompromisedDevices: Boolean = false
         private var googlePay: PayriffGooglePayConfig? = null
+        private var strings: PayriffStrings? = null
 
         /** Sets [PayriffConfig.publishableKey]. */
         public fun publishableKey(value: String?): Builder = apply { publishableKey = value }
@@ -127,6 +134,9 @@ public class PayriffConfig(
         /** Sets [PayriffConfig.googlePay]; `null` turns Google Pay off. */
         public fun googlePay(value: PayriffGooglePayConfig?): Builder = apply { googlePay = value }
 
+        /** Sets [PayriffConfig.strings]; `null` keeps the built-in texts. */
+        public fun strings(value: PayriffStrings?): Builder = apply { strings = value }
+
         /** Creates the configuration. Never throws; see [PayriffConfig] for validation. */
         public fun build(): PayriffConfig = PayriffConfig(
             publishableKey = publishableKey,
@@ -137,6 +147,7 @@ public class PayriffConfig(
             allowScreenCaptureInDebug = allowScreenCaptureInDebug,
             allowCompromisedDevices = allowCompromisedDevices,
             googlePay = googlePay,
+            strings = strings,
         )
     }
 

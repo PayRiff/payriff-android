@@ -26,7 +26,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
 import androidx.annotation.RequiresApi
-import com.payriff.android.PayriffLanguage
+import com.payriff.android.PayriffErrorCode
 import com.payriff.android.PayriffResult
 import com.payriff.android.internal.AndroidExternalApps
 import com.payriff.android.internal.ExternalLauncher
@@ -34,7 +34,6 @@ import com.payriff.android.internal.ExternalOutcome
 import com.payriff.android.internal.HttpTransport
 import com.payriff.android.internal.PayriffActivity
 import com.payriff.android.internal.PayriffLog
-import com.payriff.android.internal.PayriffStrings
 import com.payriff.android.internal.SheetMessage
 import com.payriff.android.internal.SheetView
 import com.payriff.android.internal.StringKey
@@ -49,14 +48,18 @@ import kotlinx.coroutines.CoroutineScope
  * gateway callback is noticed in `shouldInterceptRequest`, which also sees POSTs.
  *
  * The WebViews' page and frame requests are recorded in [ThreeDsWebsiteData]; when the sheet goes away, [dispose]
- * removes their website data before it destroys the WebViews (CONTRACT §9.1a).
+ * removes their website data before it destroys the WebViews (CONTRACT §9.1a). The hidden 3DS Method WebViews report
+ * their first page to the flow, which waits for them before it asks `/three-ds` (CONTRACT §19.1).
+ *
+ * @param texts The sheet's texts (CONTRACT §18.6): the payment view's [com.payriff.android.PayriffStrings], then the
+ *   configuration's, then the built-in ones in the sheet's language.
  */
 internal class CardSheetController(
     private val activity: PayriffActivity,
     private val sheet: SheetView,
     private val request: CardSheetRequest,
     credentials: CardCredentials,
-    private val language: PayriffLanguage,
+    private val texts: ResolvedStrings,
     private val screenProtected: Boolean,
     transport: HttpTransport,
     scope: CoroutineScope,
@@ -128,8 +131,8 @@ internal class CardSheetController(
 
     override fun runMethod(methodUrl: String?, methodBody: ByteArray?, methodUrlServer: String?) {
         destroyHiddenWebViews()
-        if (methodUrl != null) createHiddenWebView()?.postUrl(methodUrl, methodBody ?: ByteArray(0))
-        if (methodUrlServer != null) createHiddenWebView()?.postUrl(methodUrlServer, ByteArray(0))
+        if (methodUrl != null) startHiddenWebView { it.postUrl(methodUrl, methodBody ?: ByteArray(0)) }
+        if (methodUrlServer != null) startHiddenWebView { it.postUrl(methodUrlServer, ByteArray(0)) }
     }
 
     override fun destroyHiddenWebViews() {
@@ -148,7 +151,8 @@ internal class CardSheetController(
     override fun showPageLoadError() {
         sheet.showMessage(
             SheetMessage(
-                message = text(StringKey.PAGE_LOAD_ERROR),
+                // The sheet's error state: pageLoadError, else errorMessages[NETWORK_ERROR] (CONTRACT §18.6).
+                message = texts.errorLine(StringField.PAGE_LOAD_ERROR, PayriffErrorCode.NETWORK_ERROR),
                 primaryLabel = text(StringKey.RETRY),
                 onPrimary = { flow.onRetry() },
                 secondaryLabel = text(StringKey.CLOSE),
@@ -182,6 +186,12 @@ internal class CardSheetController(
         // Every page of the 3DS sheet is the bank's, so it is always inset (CONTRACT §9.1, §16.8).
         sheet.setBankPageInset(webView, inset = true)
         return webView
+    }
+
+    /** Creates a hidden WebView and [load]s it; one that cannot be created has no page to wait for (CONTRACT §19.1). */
+    private fun startHiddenWebView(load: (WebView) -> Unit) {
+        val webView = createHiddenWebView()
+        if (webView == null) flow.onMethodPageLoaded() else load(webView)
     }
 
     private fun createHiddenWebView(): WebView? {
@@ -344,9 +354,19 @@ internal class CardSheetController(
         }
     }
 
-    /** The hidden 3DS Method WebViews: the same policy, but they never open apps or end the flow. */
+    /**
+     * The hidden 3DS Method WebViews: the same policy, but they never open apps or end the flow. Each reports its first
+     * page once, loaded or failed (CONTRACT §19.1 step 2).
+     */
     private inner class HiddenWebViewClient : WebViewClient() {
         private val policy = ThreeDsNavigator(apiBase)
+        private var reported = false
+
+        private fun reportLoaded() {
+            if (reported) return
+            reported = true
+            flow.onMethodPageLoaded()
+        }
 
         private fun allowed(url: String, isMainFrame: Boolean): Boolean =
             when (policy.classify(url, isMainFrame)) {
@@ -372,6 +392,12 @@ internal class CardSheetController(
             return null
         }
 
+        override fun onPageFinished(view: WebView, url: String) = reportLoaded()
+
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+            if (request.isForMainFrame) reportLoaded()
+        }
+
         override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) {
             handler.cancel()
         }
@@ -380,6 +406,7 @@ internal class CardSheetController(
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
             hiddenWebViews.remove(view)
             destroyWebView(view)
+            reportLoaded()
             return true
         }
     }
@@ -426,7 +453,7 @@ internal class CardSheetController(
 
     // endregion
 
-    private fun text(key: StringKey): String = PayriffStrings.get(key, language)
+    private fun text(key: StringKey): String = texts.sheet(key)
 
     private companion object {
         const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT

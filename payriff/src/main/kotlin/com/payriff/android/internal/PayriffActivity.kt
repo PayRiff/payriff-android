@@ -26,6 +26,7 @@ import com.payriff.android.internal.card.CardSetup
 import com.payriff.android.internal.card.CardSheetController
 import com.payriff.android.internal.card.CardSheetIntents
 import com.payriff.android.internal.card.CardSheetRequest
+import com.payriff.android.internal.card.ResolvedStrings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +40,10 @@ import kotlinx.coroutines.cancel
  * Its window is protected with `FLAG_SECURE` (CONTRACT §16.0 item 4): screenshots, screen recordings, screen
  * sharing and the recents thumbnail show nothing of the bank page. Debuggable apps may turn this off with
  * [PayriffConfig.allowScreenCaptureInDebug].
+ *
+ * Its texts are the opening payment view's [com.payriff.android.PayriffStrings], then [PayriffConfig.strings], then the
+ * built-in ones (CONTRACT §18.6). Its chrome is right-to-left when the screen that opened it is, or in Arabic (CONTRACT
+ * §18.7, §19.3).
  */
 internal class PayriffActivity : ComponentActivity() {
 
@@ -48,6 +53,7 @@ internal class PayriffActivity : ComponentActivity() {
     private var flowId: String? = null
     private var config = PayriffConfig()
     private var language = PayriffLanguage.EN
+    private var texts = ResolvedStrings(PayriffLanguage.EN)
     private var nightMode = false
     private var resultDelivered = false
     private var screenProtected = true
@@ -131,16 +137,18 @@ internal class PayriffActivity : ComponentActivity() {
         config = currentConfig ?: PayriffConfig()
         applyScreenProtection()
         val localeTag = ConfigurationCompat.getLocales(resources.configuration)[0]?.toLanguageTag()
-        language = Languages.effective(request.language, config.language, localeTag)
+        language = Languages.effective(request.language, config.language, localeTag, config.region)
+        texts = ResolvedStrings(language, request.strings, config.strings)
         nightMode = isNightMode(resources.configuration)
         applySystemBars()
         val sheetView = installSheet { card?.onUserClose() }
+        sheetView.root.layoutDirection = request.layoutDirection(language)
         val controller = CardSheetController(
             activity = this,
             sheet = sheetView,
             request = request,
             credentials = credentials,
-            language = language,
+            texts = texts,
             screenProtected = screenProtected,
             transport = Payriff.transport(),
             scope = scope,
@@ -277,7 +285,7 @@ internal class PayriffActivity : ComponentActivity() {
 
     private fun palette(): Palette = if (nightMode) Palette.DARK else Palette.LIGHT
 
-    private fun text(key: StringKey): String = PayriffStrings.get(key, language)
+    private fun text(key: StringKey): String = texts.sheet(key)
 
     private fun isNightMode(configuration: Configuration): Boolean =
         (configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
