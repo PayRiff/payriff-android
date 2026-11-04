@@ -59,12 +59,28 @@ class ExampleSettingsTest {
     }
 
     @Test
+    fun theGatewayMerchantIdGoesToTheGooglePayConfig() {
+        // CONTRACT revision 10: payriff.googlePayGatewayMerchantId, for orders without a googlePay object.
+        val on = ExampleSettings.config("pr_pk_live_TEST", "PRODUCTION", "AZ", googlePay = true, googlePayGatewayMerchantId = " PRF0001 ")
+        assertEquals("PRF0001", on.googlePay?.gatewayMerchantId)
+        assertEquals("payriff", on.googlePay?.gateway)
+        assertNull("blank: none", ExampleSettings.config("", "PRODUCTION", "AZ", googlePay = true).googlePay?.gatewayMerchantId)
+    }
+
+    @Test
     fun theBuildHoldsNoSecretKey() {
         // Only the publishable key, the environment, the region and the Google Pay settings come from local.properties;
         // the order comes from your backend.
         val fields = BuildConfig::class.java.declaredFields.map { it.name }.filter { it.startsWith("PAYRIFF_") }
         assertEquals(
-            listOf("PAYRIFF_ENVIRONMENT", "PAYRIFF_GOOGLE_PAY", "PAYRIFF_GOOGLE_PAY_MERCHANT_ID", "PAYRIFF_PUBLISHABLE_KEY", "PAYRIFF_REGION"),
+            listOf(
+                "PAYRIFF_ENVIRONMENT",
+                "PAYRIFF_GOOGLE_PAY",
+                "PAYRIFF_GOOGLE_PAY_GATEWAY_MERCHANT_ID",
+                "PAYRIFF_GOOGLE_PAY_MERCHANT_ID",
+                "PAYRIFF_PUBLISHABLE_KEY",
+                "PAYRIFF_REGION",
+            ),
             fields.sorted(),
         )
         assertTrue(BuildConfig::class.java.declaredFields.none { "SECRET" in it.name.uppercase() })

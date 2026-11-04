@@ -1,5 +1,5 @@
 {
-  "description": "Apple Pay and Google Pay (CONTRACT §17, revision 7). Inputs are what the SDK sees; expect is what it must produce. JSON objects under expect are compared as JSON values (key order and white space do not matter). order objects are the GET order payload (§16.3); wrap them in the usual {\"code\":\"00000\",\"payload\":…} envelope when a test needs a response. amount is a JSON number, as the API sends it. X-Client-App-Id is the platform's own example id.",
+  "description": "Apple Pay and Google Pay (CONTRACT §17, revision 7). Inputs are what the SDK sees; expect is what it must produce. JSON objects under expect are compared as JSON values (key order and white space do not matter). order objects are the GET order payload (§16.3); wrap them in the usual {\"code\":\"00000\",\"payload\":…} envelope when a test needs a response. amount is a JSON number, as the API sends it. X-Client-App-Id is the platform's own example id. Revision 10: availability no longer checks paymentMethods; see platformGuard and googlePayGateway.",
   "applePayMerchantIdentifiers": [
     {
       "value": "merchant.com.example.shop",
@@ -55,7 +55,7 @@
     }
   ],
   "availability": {
-    "description": "Assumes the wallet's config is set and valid, the device can pay and is not compromised (§17.3 items 1, 2 and 4).",
+    "description": "Revision 10 (owner decision 2026-11-04): paymentMethods is NOT checked. Assumes the wallet's config is set and valid, the device can pay and is not compromised, and the app runs on the wallet's own platform (§17.3). googlePayConfig holds the PayriffGooglePayConfig gateway fields of the case.",
     "cases": [
       {
         "name": "Google Pay listed with gateway parameters",
@@ -78,12 +78,16 @@
           "applePay": null
         },
         "expect": {
-          "applePay": false,
+          "applePay": true,
           "googlePay": true
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": null
         }
       },
       {
-        "name": "Apple Pay listed",
+        "name": "Apple Pay offered (paymentMethods is not checked)",
         "order": {
           "orderId": "o1",
           "amount": 10.5,
@@ -104,6 +108,10 @@
         "expect": {
           "applePay": true,
           "googlePay": false
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": null
         }
       },
       {
@@ -125,6 +133,10 @@
         "expect": {
           "applePay": true,
           "googlePay": false
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": null
         }
       },
       {
@@ -151,10 +163,14 @@
         "expect": {
           "applePay": true,
           "googlePay": false
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": null
         }
       },
       {
-        "name": "Google Pay without googlePay object is not offered",
+        "name": "Google Pay without gateway parameters anywhere is not offered",
         "order": {
           "orderId": "o1",
           "amount": 10.5,
@@ -170,8 +186,12 @@
           "applePay": null
         },
         "expect": {
-          "applePay": false,
+          "applePay": true,
           "googlePay": false
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": null
         }
       },
       {
@@ -194,8 +214,12 @@
           "applePay": null
         },
         "expect": {
-          "applePay": false,
+          "applePay": true,
           "googlePay": true
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": null
         }
       },
       {
@@ -222,6 +246,10 @@
         "expect": {
           "applePay": false,
           "googlePay": false
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": null
         }
       },
       {
@@ -241,12 +269,16 @@
           "applePay": null
         },
         "expect": {
-          "applePay": false,
+          "applePay": true,
           "googlePay": false
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": null
         }
       },
       {
-        "name": "method names are case-sensitive",
+        "name": "paymentMethods is ignored, even with lower-case names",
         "order": {
           "orderId": "o1",
           "amount": 10.5,
@@ -266,8 +298,12 @@
           "applePay": null
         },
         "expect": {
-          "applePay": false,
-          "googlePay": false
+          "applePay": true,
+          "googlePay": true
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": null
         }
       },
       {
@@ -285,6 +321,85 @@
             "gatewayMerchantId": "BCR2DN4T"
           },
           "applePay": null
+        },
+        "expect": {
+          "applePay": true,
+          "googlePay": true
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": null
+        }
+      },
+      {
+        "name": "card only, gatewayMerchantId from the config",
+        "order": {
+          "orderId": "o1",
+          "amount": 10.5,
+          "currency": "AZN",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "CREATED",
+          "language": "AZ",
+          "paymentMethods": [
+            "CARD"
+          ],
+          "googlePay": null,
+          "applePay": null
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": "PRF0001"
+        },
+        "expect": {
+          "applePay": true,
+          "googlePay": true
+        }
+      },
+      {
+        "name": "no amount offers nothing",
+        "order": {
+          "orderId": "o1",
+          "amount": null,
+          "currency": "AZN",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "CREATED",
+          "language": "AZ",
+          "paymentMethods": [
+            "CARD"
+          ],
+          "googlePay": null,
+          "applePay": null
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": "PRF0001"
+        },
+        "expect": {
+          "applePay": false,
+          "googlePay": false
+        }
+      },
+      {
+        "name": "no currency offers nothing",
+        "order": {
+          "orderId": "o1",
+          "amount": 10.5,
+          "currency": " ",
+          "description": "Order #42",
+          "merchantName": "Test Merchant",
+          "status": "CREATED",
+          "language": "AZ",
+          "paymentMethods": [
+            "CARD"
+          ],
+          "googlePay": null,
+          "applePay": null
+        },
+        "googlePayConfig": {
+          "gateway": null,
+          "gatewayMerchantId": "PRF0001"
         },
         "expect": {
           "applePay": false,
@@ -347,7 +462,9 @@
       "region": "az",
       "config": {
         "merchantId": null,
-        "merchantName": null
+        "merchantName": null,
+        "gateway": null,
+        "gatewayMerchantId": null
       },
       "appName": "Example Shop",
       "order": {
@@ -452,7 +569,9 @@
       "region": "sa",
       "config": {
         "merchantId": "BCR2DN4TABCDEF",
-        "merchantName": "Shop KSA"
+        "merchantName": "Shop KSA",
+        "gateway": null,
+        "gatewayMerchantId": null
       },
       "appName": "Example Shop",
       "order": {
@@ -557,7 +676,9 @@
       "region": "az",
       "config": {
         "merchantId": "  ",
-        "merchantName": "  "
+        "merchantName": "  ",
+        "gateway": null,
+        "gatewayMerchantId": null
       },
       "appName": "Example Shop",
       "order": {
@@ -650,6 +771,109 @@
               "parameters": {
                 "gateway": "payriff",
                 "gatewayMerchantId": "BCR2DN4T"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "az: no googlePay on the order, the config's gatewayMerchantId",
+      "region": "az",
+      "config": {
+        "merchantId": null,
+        "merchantName": null,
+        "gateway": null,
+        "gatewayMerchantId": "PRF0001"
+      },
+      "appName": "Example Shop",
+      "order": {
+        "orderId": "o1",
+        "amount": 10.5,
+        "currency": "AZN",
+        "description": "Order #42",
+        "merchantName": "Test Merchant",
+        "status": "CREATED",
+        "language": "AZ",
+        "paymentMethods": [
+          "CARD"
+        ],
+        "googlePay": null,
+        "applePay": null
+      },
+      "expect": {
+        "isReadyToPayRequest": {
+          "apiVersion": 2,
+          "apiVersionMinor": 0,
+          "allowedPaymentMethods": [
+            {
+              "type": "CARD",
+              "parameters": {
+                "allowedAuthMethods": [
+                  "PAN_ONLY",
+                  "CRYPTOGRAM_3DS"
+                ],
+                "allowedCardNetworks": [
+                  "VISA",
+                  "MASTERCARD"
+                ]
+              }
+            }
+          ]
+        },
+        "paymentDataRequest": {
+          "apiVersion": 2,
+          "apiVersionMinor": 0,
+          "merchantInfo": {
+            "merchantName": "Test Merchant"
+          },
+          "allowedPaymentMethods": [
+            {
+              "type": "CARD",
+              "parameters": {
+                "allowedAuthMethods": [
+                  "PAN_ONLY",
+                  "CRYPTOGRAM_3DS"
+                ],
+                "allowedCardNetworks": [
+                  "VISA",
+                  "MASTERCARD"
+                ]
+              },
+              "tokenizationSpecification": {
+                "type": "PAYMENT_GATEWAY",
+                "parameters": {
+                  "gateway": "payriff",
+                  "gatewayMerchantId": "PRF0001"
+                }
+              }
+            }
+          ],
+          "transactionInfo": {
+            "totalPriceStatus": "FINAL",
+            "totalPrice": "10.50",
+            "currencyCode": "AZN",
+            "countryCode": "AZ"
+          }
+        },
+        "buttonAllowedPaymentMethods": [
+          {
+            "type": "CARD",
+            "parameters": {
+              "allowedAuthMethods": [
+                "PAN_ONLY",
+                "CRYPTOGRAM_3DS"
+              ],
+              "allowedCardNetworks": [
+                "VISA",
+                "MASTERCARD"
+              ]
+            },
+            "tokenizationSpecification": {
+              "type": "PAYMENT_GATEWAY",
+              "parameters": {
+                "gateway": "payriff",
+                "gatewayMerchantId": "PRF0001"
               }
             }
           }
@@ -968,5 +1192,129 @@
       "masterCard"
     ],
     "description": "Revision 9 (§19.4): region sa adds mada (PKPaymentNetwork.mada, which needs countryCode SA). Google Pay keeps VISA and MASTERCARD."
+  },
+  "platformGuard": {
+    "description": "Revision 10: a wallet is offered only on its own platform, whatever is configured. Apple Pay on iOS, Google Pay on Android.",
+    "cases": [
+      {
+        "platform": "ios",
+        "applePayConfigured": true,
+        "googlePayConfigured": true,
+        "expect": {
+          "applePay": true,
+          "googlePay": false
+        }
+      },
+      {
+        "platform": "android",
+        "applePayConfigured": true,
+        "googlePayConfigured": true,
+        "expect": {
+          "applePay": false,
+          "googlePay": true
+        }
+      },
+      {
+        "platform": "ios",
+        "applePayConfigured": false,
+        "googlePayConfigured": true,
+        "expect": {
+          "applePay": false,
+          "googlePay": false
+        }
+      },
+      {
+        "platform": "android",
+        "applePayConfigured": true,
+        "googlePayConfigured": false,
+        "expect": {
+          "applePay": false,
+          "googlePay": false
+        }
+      }
+    ]
+  },
+  "googlePayGateway": {
+    "description": "Revision 10: the tokenization parameters. gatewayMerchantId: the order's, else the config's; none → Google Pay is not offered. gateway: the order's, else the config's, else \"payriff\". Each value trimmed; blank counts as missing.",
+    "cases": [
+      {
+        "name": "the order's pair",
+        "orderGooglePay": {
+          "gateway": "payriff",
+          "gatewayMerchantId": "BCR2DN4T"
+        },
+        "config": {
+          "gateway": null,
+          "gatewayMerchantId": "PRF0001"
+        },
+        "expect": {
+          "gateway": "payriff",
+          "gatewayMerchantId": "BCR2DN4T"
+        }
+      },
+      {
+        "name": "no order object: the config's id, the default gateway",
+        "orderGooglePay": null,
+        "config": {
+          "gateway": null,
+          "gatewayMerchantId": "PRF0001"
+        },
+        "expect": {
+          "gateway": "payriff",
+          "gatewayMerchantId": "PRF0001"
+        }
+      },
+      {
+        "name": "no order object: the config's gateway too",
+        "orderGooglePay": null,
+        "config": {
+          "gateway": " gccpay ",
+          "gatewayMerchantId": " PRF0002 "
+        },
+        "expect": {
+          "gateway": "gccpay",
+          "gatewayMerchantId": "PRF0002"
+        }
+      },
+      {
+        "name": "blank order id falls back to the config's",
+        "orderGooglePay": {
+          "gateway": "payriff",
+          "gatewayMerchantId": "  "
+        },
+        "config": {
+          "gateway": null,
+          "gatewayMerchantId": "PRF0001"
+        },
+        "expect": {
+          "gateway": "payriff",
+          "gatewayMerchantId": "PRF0001"
+        }
+      },
+      {
+        "name": "the order's id with the config's gateway",
+        "orderGooglePay": {
+          "gateway": null,
+          "gatewayMerchantId": "BCR2DN4T"
+        },
+        "config": {
+          "gateway": "gccpay",
+          "gatewayMerchantId": null
+        },
+        "expect": {
+          "gateway": "gccpay",
+          "gatewayMerchantId": "BCR2DN4T"
+        }
+      },
+      {
+        "name": "nothing anywhere: not offered",
+        "orderGooglePay": null,
+        "config": {
+          "gateway": null,
+          "gatewayMerchantId": null
+        },
+        "expect": null
+      }
+    ]
   }
 }

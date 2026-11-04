@@ -11,10 +11,13 @@ payriff.environment=SANDBOX
 # with SA, SANDBOX payments go to production and charge real cards.
 payriff.region=AZ
 # Google Pay in the payment view: true or false. The Payriff sandbox has no wallets, so Google Pay shows only for
-# PRODUCTION orders that list GOOGLE_PAY, and it charges real cards. Google Pay in production needs the app's production
-# access in the Google Pay & Wallet Console (integration type Gateway).
+# PRODUCTION orders, and it charges real cards. Google Pay in production needs the app's production access in the
+# Google Pay & Wallet Console (integration type Gateway).
 payriff.googlePay=false
 # Optional: your Google merchant ID from the Google Pay & Wallet Console.
 payriff.googlePayMerchantId=
+# Payriff's gateway merchant ID for Google Pay. Needed when Payriff's orders have no googlePay object: without it
+# from the order or here, Google Pay does not show.
+payriff.googlePayGatewayMerchantId=
 # There is no secret key here: your server creates the order with its secret key (POST /api/v3/orders)
 # and returns orderId and clientSecret.

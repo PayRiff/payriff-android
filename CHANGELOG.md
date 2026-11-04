@@ -1,3 +1,22 @@
+## [1.0.0-rc.6] - 2026-11-04
+
+Wallets follow the merchant's config (CONTRACT revision 10).
+
+### Added
+
+- `PayriffGooglePayConfig.gatewayMerchantId` (default `null`) and `gateway` (default `"payriff"`), with
+  `@JvmOverloads` constructors, a Java `Builder`, `newBuilder()` and `PayriffGooglePayConfig.DEFAULT_GATEWAY`. The
+  tokenization parameters are the order's `googlePay` values when they are not blank, else these; every value is
+  trimmed (`wallet.json` → `googlePayGateway`).
+
+### Changed
+
+- Google Pay is offered without checking the order's `paymentMethods`: `PayriffConfig.googlePay` alone decides, with
+  the order's status (`CREATED` or `PENDING`), amount and currency, the device check and `isReadyToPay` as before.
+  Without a gateway merchant id from the order or the config it is not offered, logged as
+  `Google Pay offered: false (no gatewayMerchantId)`. Whether Payriff accepts the token is decided at `/pay`.
+- Example app: `payriff.googlePayGatewayMerchantId` in `local.properties`.
+
 ## [1.0.0-rc.4] - 2026-11-04
 
 Design-system options (CONTRACT revision 8, §18) and Payriff.js 1.3.1 alignment (revision 9, §19). The design options

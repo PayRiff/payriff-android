@@ -71,11 +71,11 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-    implementation("com.payriff:payriff-android:1.0.0-rc.4")
+    implementation("com.payriff:payriff-android:1.0.0-rc.6")
 }
 ```
 
-`1.0.0-rc.4` is the release candidate of 1.0.0. The coordinates stay the same when the SDK also goes to Maven
+`1.0.0-rc.6` is the release candidate of 1.0.0. The coordinates stay the same when the SDK also goes to Maven
 Central; then the `maven(...)` line can go.
 
 The library manifest is merged into your app automatically. It adds the `INTERNET` permission, the 3-D Secure activity, a small start-up provider (see [Platform notes](#platform-notes)) and the Google Pay API's `com.google.android.gms.wallet.api.enabled` meta-data. Google Play services' own manifests, which come with `play-services-wallet`, add `ACCESS_NETWORK_STATE`, a query for the Google Maps app, OpenGL ES 2.0 as a required feature, the optional `org.apache.http.legacy` library and Google's `GoogleApiActivity` (not exported). No ProGuard/R8 rules are required.
@@ -390,7 +390,7 @@ paymentView.setOnLoadFailedListener { error -> offerAnotherWayToPay(error) }
 
 `PayriffPaymentView` shows Google Pay above the card form, and `PayriffGooglePayButton` is a standalone Google Pay button for a screen of your own. Both use Google's official button and the Google Pay API (`play-services-wallet`), and pay through the same Client API as a card: the Google Pay token goes to `/pay` with `method` `GOOGLE_PAY`, then 3-D Secure, when the bank asks for it, and the status checks run as for a card. The result is the usual `PayriffResult`.
 
-**Before you start.** Approval is your job: in the [Google Pay & Wallet Console](https://pay.google.com/business/console), get production access for your app, with the integration type **Gateway**. The gateway and your gateway merchant id come from the order, so the SDK needs neither. The SDK's manifest already enables the Google Pay API (`com.google.android.gms.wallet.api.enabled`), and it is merged into your app. The Payriff sandbox has no wallets: Google Pay is offered for production orders only, and charges real cards.
+**Before you start.** Approval is your job: in the [Google Pay & Wallet Console](https://pay.google.com/business/console), get production access for your app, with the integration type **Gateway**. The token is tokenized for Payriff's gateway: when Payriff's order carries a `googlePay` object, its `gateway` and `gatewayMerchantId` are used; **when it has none, set `gatewayMerchantId` in `PayriffGooglePayConfig`** (ask Payriff for it), or Google Pay does not show. The SDK's manifest already enables the Google Pay API (`com.google.android.gms.wallet.api.enabled`), and it is merged into your app. The Payriff sandbox has no wallets: Google Pay is offered for production orders only, and charges real cards.
 
 ```kotlin
 Payriff.configure(
@@ -399,14 +399,16 @@ Payriff.configure(
         googlePay = PayriffGooglePayConfig(
             merchantId = "BCR2DN4T…",      // optional: your Google merchant ID from the console
             merchantName = "Example Shop", // optional: else the order's merchant name, else your app's label
+            gatewayMerchantId = "PRF0001", // needed when Payriff's orders have no googlePay object
+            // gateway = "payriff",        // the default; the order's gateway wins when it has one
         ),
     ),
 )
 ```
 
-`googlePay = null`, the default, never offers Google Pay. The Google Pay environment is `TEST` with the sandbox host (`https://sb-api.payriff.com`) and `PRODUCTION` otherwise. From Java: `new PayriffConfig.Builder()….googlePay(new PayriffGooglePayConfig(merchantId, merchantName))`.
+`googlePay = null`, the default, never offers Google Pay. The Google Pay environment is `TEST` with the sandbox host (`https://sb-api.payriff.com`) and `PRODUCTION` otherwise. From Java: `new PayriffConfig.Builder()….googlePay(new PayriffGooglePayConfig.Builder().merchantId(merchantId).gatewayMerchantId("PRF0001").build())`.
 
-**When it shows.** The Google Pay button appears only once all of these are known: `googlePay` is set; the device is not compromised; the order's status is `CREATED` or `PENDING`, its `paymentMethods` lists `GOOGLE_PAY` (`CARD` is not needed) and its `googlePay` has a gateway and a gateway merchant id; and Google Pay's `isReadyToPay` says the device can pay with Visa or Mastercard. Until then the payment view is the card screen alone. With logging on, one debug line per order says why, for example `Google Pay offered: false (the order does not list GOOGLE_PAY)`.
+**When it shows.** Your config decides, not the order's `paymentMethods`: the Google Pay button appears only once all of these are known: `googlePay` is set; the device is not compromised; the order's status is `CREATED` or `PENDING`, with an amount and a currency; a gateway merchant id comes from the order's `googlePay` or from `PayriffGooglePayConfig.gatewayMerchantId`; and Google Pay's `isReadyToPay` says the device can pay with Visa or Mastercard. Until then the payment view is the card screen alone. With logging on, one debug line per order says why, for example `Google Pay offered: false (no gatewayMerchantId)`. Whether Payriff accepts the token for the order is decided at `/pay`: if it does not, that payment fails there.
 
 **In the payment view.** The button sits at the top, then "Or pay by card" between two lines, then the card form. While any payment runs, the form is locked, Pay shows its spinner and the Google Pay button is dimmed. The Google Pay result goes to `onResultListener` like a card result. Closing the Google Pay sheet reports nothing, so the customer can try again or pay by card. For an order without `CARD`, Pay stays disabled ("This order cannot be paid by card") and Google Pay stays usable.
 
@@ -681,9 +683,11 @@ payriff.region=AZ
 payriff.googlePay=false
 # Optional: your Google merchant ID from the Google Pay & Wallet Console
 payriff.googlePayMerchantId=
+# Payriff's gateway merchant ID, needed when the orders have no googlePay object
+payriff.googlePayGatewayMerchantId=
 ```
 
-With `payriff.googlePay=true` the payment view also offers [Google Pay](#google-pay). The Payriff sandbox has no wallets, so try it with `PRODUCTION` orders that list `GOOGLE_PAY`, on a device with Google Pay set up, and with real cards. Google Pay in production needs production access for `com.payriff.example.android` (or your own application id) in the [Google Pay & Wallet Console](https://pay.google.com/business/console), with the integration type **Gateway**.
+With `payriff.googlePay=true` the payment view also offers [Google Pay](#google-pay). The Payriff sandbox has no wallets, so try it with `PRODUCTION` orders (with `payriff.googlePayGatewayMerchantId` set when they have no `googlePay` object), on a device with Google Pay set up, and with real cards. Google Pay in production needs production access for `com.payriff.example.android` (or your own application id) in the [Google Pay & Wallet Console](https://pay.google.com/business/console), with the integration type **Gateway**.
 
 SDK logging is on, so the SDK's lines appear in Logcat (tag `Payriff`). The example keeps the SDK's security defaults: its connections to Payriff are pinned, so a proxy such as Charles or Burp makes them fail, and on a rooted device, or with Frida or Xposed loaded, the payment view says that card payments aren't available on this device. To pay from such a test device anyway, add `allowCompromisedDevices = true` to `ExampleSettings.config` for that run of the debug build; a release build ignores it.
 
@@ -706,7 +710,7 @@ SDK logging is on, so the SDK's lines appear in Logcat (tag `Payriff`). The exam
 | `Failed(DEVICE_COMPROMISED)`, or Pay disabled with "Card payments aren't available on this device" | The device looks rooted, a hooking framework (Frida, Xposed) is loaded, or the check could not complete. With `enableLogging = true` a warning names the signals, for example `Magisk` or `check failed`. For development on such a device, set `PayriffConfig(allowCompromisedDevices = true)` in a debug build. A release build ignores it and logs that `allowCompromisedDevices` is ignored outside debug builds. |
 | `Failed(NETWORK_ERROR)` with "Payriff's server certificate could not be verified" | A debugging proxy (or a device with an injected CA) is intercepting TLS. Certificate pinning refuses it; remove the proxy. Debug builds log requests and responses, so you do not need to proxy to see the traffic. |
 | `Pending(NOT_FINAL)` | The status was not final in time, or the customer closed the 3-D Secure sheet. Confirm it on your backend; Payriff's callback will arrive there. |
-| The Google Pay button does not appear | With `enableLogging = true`, the debug line `Google Pay offered: false (…)` names the first missing condition: `PayriffConfig.googlePay` is not set, the order does not list `GOOGLE_PAY` or has no Google Pay gateway (the sandbox has no wallets), the device failed the integrity check, or `isReadyToPay` is false (Google Pay is not available on the device, for example without Google Play services). |
+| The Google Pay button does not appear | With `enableLogging = true`, the debug line `Google Pay offered: false (…)` names the first missing condition: `PayriffConfig.googlePay` is not set, `no gatewayMerchantId` (neither the order nor `PayriffGooglePayConfig.gatewayMerchantId` has one), the order's status, amount or currency (the sandbox has no wallets), the device failed the integrity check, or `isReadyToPay` is false (Google Pay is not available on the device, for example without Google Play services). |
 | `Failed(WALLET_FAILED)` with `Google Pay failed (status 10).` | Google Pay refused the request as a developer error. Check that the app has production access in the Google Pay & Wallet Console and that `merchantId` belongs to it; Logcat shows Google's reason under the tag `WalletMerchantError`. |
 | Screenshots or screen recordings of the form are black | That is the screen protection (`FLAG_SECURE`). For QA in a debug build, set `allowScreenCaptureInDebug = true`. |
 | `IllegalStateException: LifecycleOwner … is attempting to register while current state is RESUMED` | Create `PayriffCardPaymentLauncher` while the activity or fragment is created, not in a click handler. |

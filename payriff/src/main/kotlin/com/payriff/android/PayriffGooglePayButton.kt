@@ -44,8 +44,9 @@ import kotlinx.coroutines.SupervisorJob
  * ```
  *
  * It needs [PayriffConfig.googlePay]. When it appears it reads the order with [Payriff.retrieveOrder] and shows
- * Google's official Pay button only when Google Pay is offered (CONTRACT §17.3): the order lists `GOOGLE_PAY` with its
- * gateway, the device is not compromised ([Payriff.isDeviceCompromised]), and Google Pay is ready on the device. Until
+ * Google's official Pay button only when Google Pay is offered (CONTRACT §17.3): the order can take it (its status,
+ * amount, currency and a gateway merchant id from the order or [PayriffGooglePayConfig.gatewayMerchantId]; not its
+ * `paymentMethods`), the device is not compromised ([Payriff.isDeviceCompromised]), and Google Pay is ready on it. Until
  * then, and when it is not offered, it shows nothing and has zero size; the availability listener says when that
  * changes. An order that does not load is not reported: the button just does not show (a non-fatal error loads again
  * the next time it appears).

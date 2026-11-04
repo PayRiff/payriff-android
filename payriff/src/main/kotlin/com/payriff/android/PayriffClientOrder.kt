@@ -17,8 +17,8 @@ import java.math.BigDecimal
  * @property paymentMethods Payment methods enabled for the order, for example `CARD` and `GOOGLE_PAY`.
  * @property applePay The order's Apple Pay details, when Payriff returned them (CONTRACT §17.3). Android has no Apple
  *   Pay; the SDK reads them as the web SDK does and never uses them.
- * @property googlePay The order's Google Pay gateway, when Payriff returned one (CONTRACT §17.3). Google Pay is offered
- *   only when both of its values are set.
+ * @property googlePay The order's Google Pay gateway, when Payriff returned one (CONTRACT §17.3, §17.5). Its values,
+ *   when not blank, win over [PayriffGooglePayConfig.gateway] and [PayriffGooglePayConfig.gatewayMerchantId].
  */
 public class PayriffClientOrder @JvmOverloads constructor(
     public val orderId: String,

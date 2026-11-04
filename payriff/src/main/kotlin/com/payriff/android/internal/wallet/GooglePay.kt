@@ -36,8 +36,9 @@ internal enum class GooglePayEnvironment(val walletConstant: Int) {
 }
 
 /**
- * The values of one order's Google Pay payment (CONTRACT §17.4): the order's gateway, the amount with 2 decimals, the
- * currency, the country of the region and the merchant's name and id. None of them is secret.
+ * The values of one order's Google Pay payment (CONTRACT §17.4, §17.5): the tokenization gateway and gateway merchant
+ * id ([GooglePayGateway]), the amount with 2 decimals, the currency, the country of the region and the merchant's name
+ * and id. None of them is secret.
  */
 internal class GooglePayTransaction(
     val gateway: String,
@@ -56,13 +57,19 @@ internal class GooglePayTransaction(
 }
 
 /**
+ * The `PAYMENT_GATEWAY` tokenization parameters of a Google Pay payment (CONTRACT §17.5, `wallet.json` →
+ * `googlePayGateway`).
+ */
+internal data class GooglePayGateway(val gateway: String, val gatewayMerchantId: String)
+
+/**
  * The Google Pay API requests of CONTRACT §17.5, exactly `wallet.json` → `googlePayRequests`: `isReadyToPayRequest`,
  * `paymentDataRequest` and the button's `buttonAllowedPaymentMethods`. Visa and Mastercard only, as for cards, with
  * `PAN_ONLY` and `CRYPTOGRAM_3DS`. Pure Kotlin, so the JVM unit tests compare them with the vectors.
  */
 internal object GooglePayRequests {
 
-    /** The `/pay` method of a Google Pay token (CONTRACT §17.7), and the order's payment method that offers it. */
+    /** The `/pay` method of a Google Pay token (CONTRACT §17.7). */
     const val METHOD = "GOOGLE_PAY"
 
     val CARD_NETWORKS: List<String> = listOf("VISA", "MASTERCARD")
@@ -88,18 +95,28 @@ internal object GooglePayRequests {
         listOf(config.merchantName, order.merchantName, appName).firstNotNullOfOrNull { name -> name?.trim()?.takeIf { it.isNotEmpty() } }
 
     /**
-     * The payment of [order] with [config] in [region], or `null` when the order lacks what Google Pay needs: a gateway
-     * and a gateway merchant id that are not blank, an amount and a currency.
+     * The tokenization parameters (CONTRACT §17.5, `wallet.json` → `googlePayGateway`), each value trimmed and skipped
+     * when blank: the gateway merchant id of the order's `googlePay` ([order]), else of [config]; the gateway of the
+     * order, else of [config] (`"payriff"` unless it names another). `null` without a gateway merchant id: Google Pay is
+     * then not offered.
+     */
+    fun gateway(order: PayriffClientOrder.GooglePay?, config: PayriffGooglePayConfig): GooglePayGateway? {
+        val gatewayMerchantId = given(order?.gatewayMerchantId) ?: given(config.gatewayMerchantId) ?: return null
+        val gateway = given(order?.gateway) ?: given(config.gateway) ?: PayriffGooglePayConfig.DEFAULT_GATEWAY
+        return GooglePayGateway(gateway, gatewayMerchantId)
+    }
+
+    /**
+     * The payment of [order] with [config] in [region], or `null` when Google Pay lacks what it needs: a gateway merchant
+     * id ([gateway]), the order's amount and its currency.
      */
     fun transaction(config: PayriffGooglePayConfig, order: PayriffClientOrder, region: PayriffRegion, appName: String?): GooglePayTransaction? {
-        val googlePay = order.googlePay ?: return null
-        val gateway = googlePay.gateway?.takeIf { it.isNotBlank() } ?: return null
-        val gatewayMerchantId = googlePay.gatewayMerchantId?.takeIf { it.isNotBlank() } ?: return null
+        val tokenization = gateway(order.googlePay, config) ?: return null
         val amount = order.amount ?: return null
         val currency = currencyCode(order.currency) ?: return null
         return GooglePayTransaction(
-            gateway = gateway,
-            gatewayMerchantId = gatewayMerchantId,
+            gateway = tokenization.gateway,
+            gatewayMerchantId = tokenization.gatewayMerchantId,
             totalPrice = totalPrice(amount),
             currencyCode = currency,
             countryCode = countryCode(region),
@@ -140,6 +157,8 @@ internal object GooglePayRequests {
 
     private fun request(): JSONObject = JSONObject().put("apiVersion", API_VERSION).put("apiVersionMinor", API_VERSION_MINOR)
 
+    private fun given(value: String?): String? = value?.trim()?.takeIf { it.isNotEmpty() }
+
     private fun cardMethod(): JSONObject = JSONObject()
         .put("type", "CARD")
         .put(
@@ -161,18 +180,19 @@ internal object GooglePayAvailability {
     const val NO_HOST = "the view is not shown in a ComponentActivity"
     const val DEVICE_BLOCKED = "the device failed the integrity check"
 
+    /** The reason Google Pay is not offered without a gateway merchant id, from the order or the config (CONTRACT §17.3). */
+    const val NO_GATEWAY_MERCHANT_ID = "no gatewayMerchantId"
+
     /**
-     * Why [order] cannot be paid with Google Pay (CONTRACT §17.3 item 3), or `null` when it can: the status must be
-     * `CREATED` or `PENDING`, `paymentMethods` must list `GOOGLE_PAY` (exact, case-sensitive; `CARD` is not needed), and
-     * the order's `googlePay` must have a gateway and a gateway merchant id that are not blank. Google Pay also needs
-     * the order's amount and currency for its total.
+     * Why [order] cannot be paid with Google Pay with [config] (CONTRACT §17.3 item 3, revision 10), or `null` when it
+     * can: the status must be `CREATED` or `PENDING`, a gateway merchant id must come from the order's `googlePay` or
+     * from [config] ([GooglePayRequests.gateway]), and the order needs an amount and a currency for the total. The
+     * order's `paymentMethods` are not checked: the merchant's config alone decides.
      */
-    fun orderProblem(order: PayriffClientOrder): String? = when {
+    fun orderProblem(order: PayriffClientOrder, config: PayriffGooglePayConfig = PayriffGooglePayConfig()): String? = when {
         order.status != PayriffPaymentStatus.CREATED && order.status != PayriffPaymentStatus.PENDING ->
             "the order's status is ${order.rawStatus ?: "unknown"}"
-        GooglePayRequests.METHOD !in order.paymentMethods -> "the order does not list GOOGLE_PAY"
-        order.googlePay?.gateway.isNullOrBlank() -> "the order has no Google Pay gateway"
-        order.googlePay?.gatewayMerchantId.isNullOrBlank() -> "the order has no Google Pay gatewayMerchantId"
+        GooglePayRequests.gateway(order.googlePay, config) == null -> NO_GATEWAY_MERCHANT_ID
         order.amount == null -> "the order has no amount"
         GooglePayRequests.currencyCode(order.currency) == null -> "the order has no currency"
         else -> null
@@ -193,7 +213,7 @@ internal object GooglePayAvailability {
     ): GooglePayTransaction? {
         val googlePay = config?.googlePay ?: return notOffered(NOT_CONFIGURED)
         if (!canPresent) return notOffered(NO_HOST)
-        orderProblem(order)?.let { return notOffered(it) }
+        orderProblem(order, googlePay)?.let { return notOffered(it) }
         val transaction = GooglePayRequests.transaction(googlePay, order, config.region, appName) ?: return notOffered("the order has no Google Pay total")
         val ready = try {
             isReadyToPay(GooglePayRequests.isReadyToPayRequest().toString())

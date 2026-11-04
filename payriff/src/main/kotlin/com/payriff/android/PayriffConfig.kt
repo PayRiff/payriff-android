@@ -38,9 +38,11 @@ import com.payriff.android.internal.card.ClientApiHosts
  *   release builds ignore it, with a warning, and refuse such devices, so leaving it on cannot reach production.
  *   Defaults to `false`.
  * @property googlePay Google Pay in [PayriffPaymentView] and [PayriffGooglePayButton] (CONTRACT §17): your
- *   [PayriffGooglePayConfig]. `null` (the default): Google Pay is never offered. It is offered for an order that lists
- *   `GOOGLE_PAY` with its gateway, on a device that is not compromised and can pay with Google Pay. The Google Pay
- *   environment is `TEST` with the sandbox host (`https://sb-api.payriff.com`) and `PRODUCTION` otherwise.
+ *   [PayriffGooglePayConfig]. `null` (the default): Google Pay is never offered. With it, Google Pay is offered for an
+ *   order that is `CREATED` or `PENDING`, with an amount, a currency and a gateway merchant id (the order's or
+ *   [PayriffGooglePayConfig.gatewayMerchantId]), on a device that is not compromised and can pay with Google Pay; the
+ *   order's `paymentMethods` are not checked (CONTRACT §17.3). The Google Pay environment is `TEST` with the sandbox
+ *   host (`https://sb-api.payriff.com`) and `PRODUCTION` otherwise.
  * @property strings Your own texts for every screen of the SDK (CONTRACT §18.6): the card form, [PayriffPaymentView]
  *   and the 3-D Secure sheet, also the one [PayriffCardPaymentLauncher] opens. `null` (the default) keeps the built-in
  *   texts in [language]. [PayriffPaymentView.strings] wins over it in that view and the sheets it opens. It is not part

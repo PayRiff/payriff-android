@@ -349,7 +349,9 @@ class GooglePayViewsTest {
             logs.lines.filter { "Google Pay offered" in it }.map { it.substringAfter("[DEBUG] ") },
         )
         assertEquals("the order's status is APPROVED", GooglePayAvailability.orderProblem(order(status = "APPROVED", methods = listOf("GOOGLE_PAY"))))
-        assertEquals("the order does not list GOOGLE_PAY", GooglePayAvailability.orderProblem(order()))
+        // Revision 10: paymentMethods is not checked; a card-only order needs a gateway merchant id from the config.
+        assertEquals("no gatewayMerchantId", GooglePayAvailability.orderProblem(order()))
+        assertNull(GooglePayAvailability.orderProblem(order(), PayriffGooglePayConfig(gatewayMerchantId = "PRF0001")))
     }
 
     // endregion

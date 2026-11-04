@@ -9,7 +9,8 @@ import com.payriff.android.PayriffRegion
 /**
  * The example's settings, compiled into the debug build from the git-ignored local.properties: the publishable key
  * (`payriff.publishableKey`), the environment (`payriff.environment`), the region (`payriff.region`) and Google Pay
- * (`payriff.googlePay`, `payriff.googlePayMerchantId`). Release builds have no publishable key and no Google Pay. SDK
+ * (`payriff.googlePay`, `payriff.googlePayMerchantId`, `payriff.googlePayGatewayMerchantId`). Release builds have no
+ * publishable key and no Google Pay. SDK
  * logs go to Logcat (tag `Payriff`). There is no secret key: the order comes from your backend.
  */
 object ExampleSettings {
@@ -25,6 +26,7 @@ object ExampleSettings {
         BuildConfig.PAYRIFF_REGION,
         BuildConfig.PAYRIFF_GOOGLE_PAY,
         BuildConfig.PAYRIFF_GOOGLE_PAY_MERCHANT_ID,
+        BuildConfig.PAYRIFF_GOOGLE_PAY_GATEWAY_MERCHANT_ID,
     )
 
     /**
@@ -35,8 +37,9 @@ object ExampleSettings {
      * that run of the debug build. Release builds ignore it, with a warning.
      *
      * [googlePay] turns on Google Pay in the payment view (`PayriffConfig.googlePay`), with [googlePayMerchantId] (blank:
-     * none) from the Google Pay & Wallet Console. The Payriff sandbox has no wallets: Google Pay shows only for production
-     * orders that list `GOOGLE_PAY`, and the app needs production access in the Google Pay & Wallet Console.
+     * none) from the Google Pay & Wallet Console and [googlePayGatewayMerchantId] (blank: none), Payriff's gateway
+     * merchant ID for orders that carry no `googlePay` object. The Payriff sandbox has no wallets: Google Pay shows only
+     * for production orders, and the app needs production access in the Google Pay & Wallet Console.
      */
     fun config(
         publishableKey: String,
@@ -44,13 +47,18 @@ object ExampleSettings {
         region: String,
         googlePay: Boolean = false,
         googlePayMerchantId: String = "",
+        googlePayGatewayMerchantId: String = "",
     ): PayriffConfig = PayriffConfig(
         publishableKey = publishableKey,
         environment = PayriffEnvironment.entries.firstOrNull { it.name.equals(environment.trim(), ignoreCase = true) }
             ?: PayriffEnvironment.SANDBOX,
         region = PayriffRegion.entries.firstOrNull { it.name.equals(region.trim(), ignoreCase = true) } ?: PayriffRegion.AZ,
         enableLogging = true,
-        googlePay = if (googlePay) PayriffGooglePayConfig(merchantId = googlePayMerchantId) else null,
+        googlePay = if (googlePay) {
+            PayriffGooglePayConfig(merchantId = googlePayMerchantId, gatewayMerchantId = googlePayGatewayMerchantId)
+        } else {
+            null
+        },
     )
 
     /**

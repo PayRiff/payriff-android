@@ -48,9 +48,10 @@ import java.util.Locale
 
 /**
  * `wallet.json` (CONTRACT §17), every section that applies to Android: the Google Pay merchant id, the availability
- * (Google Pay column), amounts, environments, the Google Pay requests (compared as JSON values), the Google Pay `/pay`
- * request and the Google Pay button styles. The Apple Pay sections belong to iOS (CONTRACT §17.2: native Android has no
- * Apple Pay).
+ * (Google Pay column; revision 10: `paymentMethods` is not checked), amounts, environments, the Google Pay requests
+ * (compared as JSON values), the tokenization parameters (`googlePayGateway`), the platform guard's Android rows, the
+ * Google Pay `/pay` request and the Google Pay button styles. The Apple Pay sections belong to iOS (CONTRACT §17.2:
+ * native Android has no Apple Pay).
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class GooglePayVectorsTest {
@@ -70,6 +71,14 @@ class GooglePayVectorsTest {
     /** A GET order payload of the vectors, as the Client API client reads it. */
     private fun order(json: JSONObject): PayriffClientOrder = CardApiClient.parseOrder(json, "o1")
 
+    /** A `PayriffGooglePayConfig` with a vector's gateway fields (`null`: not set) and merchant fields. */
+    private fun googlePayConfig(json: JSONObject?, merchantId: String? = null, merchantName: String? = null) = PayriffGooglePayConfig(
+        merchantId = merchantId,
+        merchantName = merchantName,
+        gatewayMerchantId = json?.stringOrNull("gatewayMerchantId"),
+        gateway = json?.stringOrNull("gateway") ?: PayriffGooglePayConfig.DEFAULT_GATEWAY,
+    )
+
     @Test
     fun googlePayMerchantIdsAreTrimmedAndBlankIsNull() {
         val cases = vectors.getJSONArray("googlePayMerchantIds").objects()
@@ -82,21 +91,86 @@ class GooglePayVectorsTest {
         assertEquals("Shop", PayriffGooglePayConfig(merchantName = "  Shop \n").merchantName)
         assertNull(PayriffGooglePayConfig(merchantName = "   ").merchantName)
         assertEquals(PayriffGooglePayConfig(" A ", " B "), PayriffGooglePayConfig("A", "B"))
+        // Revision 10: the gateway fields follow it too; a blank gateway is "payriff".
+        with(PayriffGooglePayConfig(gatewayMerchantId = " PRF0001 ", gateway = " gccpay ")) {
+            assertEquals("PRF0001", gatewayMerchantId)
+            assertEquals("gccpay", gateway)
+        }
+        assertNull(PayriffGooglePayConfig(gatewayMerchantId = "  ").gatewayMerchantId)
+        assertEquals("payriff", PayriffGooglePayConfig().gateway)
+        assertEquals("payriff", PayriffGooglePayConfig(gateway = "  ").gateway)
+        // The Java builder matches the constructor.
+        val built = PayriffGooglePayConfig.Builder().merchantId("M").merchantName("Shop").gatewayMerchantId("PRF0001").gateway("gccpay").build()
+        assertEquals(PayriffGooglePayConfig("M", "Shop", "PRF0001", "gccpay"), built)
+        assertEquals(built, built.newBuilder().build())
+        assertEquals(PayriffGooglePayConfig(), PayriffGooglePayConfig.Builder().gateway(null).build())
+        assertEquals("PayriffGooglePayConfig(merchantId=M, merchantName=Shop, gatewayMerchantId=PRF0001, gateway=gccpay)", built.toString())
     }
 
     @Test
     fun availabilityGooglePayColumn() = runTest {
         val cases = vectors.getJSONObject("availability").getJSONArray("cases").objects()
-        assertEquals(10, cases.size)
-        // The description's assumptions: the config is set and valid, the device can pay and is not compromised.
-        val config = PayriffConfig(publishableKey = PUBLISHABLE_KEY, googlePay = PayriffGooglePayConfig())
+        assertEquals(13, cases.size)
         for (case in cases) {
             val name = case.getString("name")
             val order = order(case.getJSONObject("order"))
             val expected = case.getJSONObject("expect").getBoolean("googlePay")
-            assertEquals(name, expected, GooglePayAvailability.orderProblem(order) == null)
+            // The description's assumptions: the config is set and valid, the device can pay and is not compromised.
+            val googlePay = googlePayConfig(case.getJSONObject("googlePayConfig"))
+            val config = PayriffConfig(publishableKey = PUBLISHABLE_KEY, googlePay = googlePay)
+            assertEquals(name, expected, GooglePayAvailability.orderProblem(order, googlePay) == null)
             val offer = GooglePayAvailability.decide(config, canPresent = true, order = order, appName = "Example Shop", isReadyToPay = { true })
             assertEquals(name, expected, offer != null)
+        }
+        // Revision 10: the order's paymentMethods are not checked; a missing gateway merchant id is named in the log line.
+        val cardOnly = order(cases.single { it.getString("name") == "card only" }.getJSONObject("order"))
+        assertEquals(listOf("CARD"), cardOnly.paymentMethods)
+        assertEquals(GooglePayAvailability.NO_GATEWAY_MERCHANT_ID, GooglePayAvailability.orderProblem(cardOnly, PayriffGooglePayConfig()))
+        assertNull(GooglePayAvailability.orderProblem(cardOnly, PayriffGooglePayConfig(gatewayMerchantId = "PRF0001")))
+    }
+
+    @Test
+    fun googlePayGatewayComesFromTheOrderThenTheConfig() {
+        val section = vectors.getJSONObject("googlePayGateway")
+        val cases = section.getJSONArray("cases").objects()
+        assertEquals(6, cases.size)
+        for (case in cases) {
+            val name = case.getString("name")
+            val orderJson = case.opt("orderGooglePay") as? JSONObject
+            val orderGooglePay = orderJson?.let { PayriffClientOrder.GooglePay(it.stringOrNull("gateway"), it.stringOrNull("gatewayMerchantId")) }
+            val resolved = GooglePayRequests.gateway(orderGooglePay, googlePayConfig(case.getJSONObject("config")))
+            val expect = case.opt("expect") as? JSONObject
+            if (expect == null) {
+                assertNull(name, resolved)
+                continue
+            }
+            assertEquals(name, expect.getString("gateway"), resolved?.gateway)
+            assertEquals(name, expect.getString("gatewayMerchantId"), resolved?.gatewayMerchantId)
+            // The same pair reaches the request's tokenization.
+            val order = order(
+                JSONObject("""{"orderId":"o1","amount":1,"currency":"AZN","status":"CREATED","paymentMethods":["CARD"]}""")
+                    .put("googlePay", orderJson ?: JSONObject.NULL),
+            )
+            val transaction = checkNotNull(GooglePayRequests.transaction(googlePayConfig(case.getJSONObject("config")), order, PayriffRegion.AZ, null)) { name }
+            val parameters = GooglePayRequests.paymentDataRequest(transaction).getJSONArray("allowedPaymentMethods").getJSONObject(0)
+                .getJSONObject("tokenizationSpecification").getJSONObject("parameters")
+            assertEquals(name, expect.getString("gateway"), parameters.getString("gateway"))
+            assertEquals(name, expect.getString("gatewayMerchantId"), parameters.getString("gatewayMerchantId"))
+        }
+    }
+
+    @Test
+    fun platformGuardAndroidRows() = runTest {
+        // Native Android has only Google Pay (CONTRACT §17.2): it is offered when it is configured, whatever else is.
+        val rows = vectors.getJSONObject("platformGuard").getJSONArray("cases").objects().filter { it.getString("platform") == "android" }
+        assertEquals(2, rows.size)
+        val order = order(JSONObject("""{"orderId":"o1","amount":10.5,"currency":"AZN","status":"CREATED","paymentMethods":["CARD"]}"""))
+        for (row in rows) {
+            val googlePay = if (row.getBoolean("googlePayConfigured")) PayriffGooglePayConfig(gatewayMerchantId = "PRF0001") else null
+            val config = PayriffConfig(publishableKey = PUBLISHABLE_KEY, googlePay = googlePay)
+            val offer = GooglePayAvailability.decide(config, canPresent = true, order = order, appName = "Example Shop", isReadyToPay = { true })
+            assertEquals(row.toString(), row.getJSONObject("expect").getBoolean("googlePay"), offer != null)
+            assertFalse("no Apple Pay on Android", row.getJSONObject("expect").getBoolean("applePay"))
         }
     }
 
@@ -106,7 +180,7 @@ class GooglePayVectorsTest {
         val withGateway = order(cases.getValue("Google Pay listed with gateway parameters").getJSONObject("order"))
         assertEquals(PayriffClientOrder.GooglePay("payriff", "BCR2DN4T"), withGateway.googlePay)
         assertNull(withGateway.applePay)
-        val apple = order(cases.getValue("Apple Pay listed").getJSONObject("order"))
+        val apple = order(cases.getValue("Apple Pay offered (paymentMethods is not checked)").getJSONObject("order"))
         assertEquals(PayriffClientOrder.ApplePay("merchant.com.payriff"), apple.applePay)
         assertNull("googlePay: null", apple.googlePay)
         val blank = order(cases.getValue("Google Pay without gatewayMerchantId is not offered").getJSONObject("order"))
@@ -156,11 +230,11 @@ class GooglePayVectorsTest {
     @Test
     fun googlePayRequestsAreTheVectorsJson() {
         val cases = vectors.getJSONArray("googlePayRequests").objects()
-        assertEquals(3, cases.size)
+        assertEquals(4, cases.size)
         for (case in cases) {
             val name = case.getString("name")
             val configJson = case.getJSONObject("config")
-            val config = PayriffGooglePayConfig(configJson.stringOrNull("merchantId"), configJson.stringOrNull("merchantName"))
+            val config = googlePayConfig(configJson, configJson.stringOrNull("merchantId"), configJson.stringOrNull("merchantName"))
             val region = PayriffRegion.valueOf(case.getString("region").uppercase(Locale.ROOT))
             val order = order(case.getJSONObject("order"))
             val transaction = checkNotNull(GooglePayRequests.transaction(config, order, region, case.getString("appName"))) { name }
@@ -185,7 +259,10 @@ class GooglePayVectorsTest {
         assertNotNull(GooglePayRequests.transaction(config, order(""","amount":1,"currency":"AZN"$gateway"""), PayriffRegion.AZ, null))
         assertNull(GooglePayRequests.transaction(config, order(""","currency":"AZN"$gateway"""), PayriffRegion.AZ, null))
         assertNull(GooglePayRequests.transaction(config, order(""","amount":1,"currency":" "$gateway"""), PayriffRegion.AZ, null))
-        assertNull(GooglePayRequests.transaction(config, order(""","amount":1,"currency":"AZN","googlePay":{"gateway":" ","gatewayMerchantId":"M1"}"""), PayriffRegion.AZ, null))
+        // A blank gateway is the config's, "payriff" by default; without a gateway merchant id there is no request.
+        assertEquals("payriff", GooglePayRequests.transaction(config, order(""","amount":1,"currency":"AZN","googlePay":{"gateway":" ","gatewayMerchantId":"M1"}"""), PayriffRegion.AZ, null)?.gateway)
+        assertNull(GooglePayRequests.transaction(config, order(""","amount":1,"currency":"AZN","googlePay":{"gateway":"payriff","gatewayMerchantId":" "}"""), PayriffRegion.AZ, null))
+        assertNull(GooglePayRequests.transaction(config, order(""","amount":1,"currency":"AZN""""), PayriffRegion.AZ, null))
         assertEquals("the order has no amount", GooglePayAvailability.orderProblem(order(""","currency":"AZN"$gateway""")))
         assertEquals("the order has no currency", GooglePayAvailability.orderProblem(order(""","amount":1$gateway""")))
         // Without any name at all, merchantInfo is left out.

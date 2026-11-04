@@ -115,6 +115,9 @@ class VectorCoverageTest {
                 "applePaySheet" to "- (iOS)",
                 // CONTRACT §19.4: Apple Pay's networks; Google Pay keeps VISA and MASTERCARD (googlePayRequests).
                 "applePayNetworks" to "- (iOS)",
+                // Revision 10.
+                "platformGuard" to "GooglePayVectorsTest.platformGuardAndroidRows (the android rows)",
+                "googlePayGateway" to "GooglePayVectorsTest.googlePayGatewayComesFromTheOrderThenTheConfig",
             ),
             "card_validation.json" to mapOf(
                 "description" to "-",

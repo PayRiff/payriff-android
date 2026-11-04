@@ -12,6 +12,7 @@ plugins {
 //   payriff.region=AZ                      (AZ or SA; SA has no sandbox: SANDBOX payments go to production)
 //   payriff.googlePay=false                (true: Google Pay in the payment view, PayriffConfig.googlePay)
 //   payriff.googlePayMerchantId=           (optional: the Google merchant ID from the Google Pay & Wallet Console)
+//   payriff.googlePayGatewayMerchantId=    (optional: Payriff's gateway merchant ID, for orders without a googlePay object)
 // They are compiled into the DEBUG BuildConfig only; release builds have no publishable key and no Google Pay.
 // The example holds no secret key: your server creates the order with its secret key (POST /api/v3/orders).
 val localProperties = Properties().apply {
@@ -57,6 +58,7 @@ android {
             buildConfigField("String", "PAYRIFF_PUBLISHABLE_KEY", javaString(localValue("payriff.publishableKey")))
             buildConfigField("boolean", "PAYRIFF_GOOGLE_PAY", localValue("payriff.googlePay").equals("true", ignoreCase = true).toString())
             buildConfigField("String", "PAYRIFF_GOOGLE_PAY_MERCHANT_ID", javaString(localValue("payriff.googlePayMerchantId")))
+            buildConfigField("String", "PAYRIFF_GOOGLE_PAY_GATEWAY_MERCHANT_ID", javaString(localValue("payriff.googlePayGatewayMerchantId")))
         }
         release {
             buildConfigField("String", "PAYRIFF_ENVIRONMENT", "\"SANDBOX\"")
@@ -64,6 +66,7 @@ android {
             buildConfigField("String", "PAYRIFF_PUBLISHABLE_KEY", "\"\"")
             buildConfigField("boolean", "PAYRIFF_GOOGLE_PAY", "false")
             buildConfigField("String", "PAYRIFF_GOOGLE_PAY_MERCHANT_ID", "\"\"")
+            buildConfigField("String", "PAYRIFF_GOOGLE_PAY_GATEWAY_MERCHANT_ID", "\"\"")
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
             // The example is never published; sign release builds with the debug key so they can be installed.

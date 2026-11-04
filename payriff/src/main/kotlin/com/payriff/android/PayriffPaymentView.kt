@@ -88,7 +88,8 @@ import kotlin.math.roundToInt
  * works edge to edge; when a parent already applies and consumes them, it adds nothing.
  *
  * **Google Pay** (CONTRACT §17.9). With [PayriffConfig.googlePay] set, the view shows Google's Pay button above the form,
- * then "Or pay by card", once it knows that Google Pay is offered: the order lists `GOOGLE_PAY` with its gateway, the
+ * then "Or pay by card", once it knows that Google Pay is offered: the order can take it (its status, amount, currency
+ * and a gateway merchant id from the order or [PayriffGooglePayConfig.gatewayMerchantId]; not its `paymentMethods`), the
  * device is not compromised, and Google Pay is ready on it. Until then, and without Google Pay, the layout is the card
  * screen above. The button runs Google Pay, then the same `/pay`, 3-D Secure and status steps as a card, and its result
  * goes to [onResultListener] like a card result. When the customer closes the Google Pay sheet nothing is reported: they
