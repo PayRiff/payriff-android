@@ -58,8 +58,9 @@ public enum class PayriffGooglePayButtonTheme {
  * @property theme Dark or light. Defaults to [PayriffGooglePayButtonTheme.AUTOMATIC], which follows the night mode.
  * @property cornerRadius Corner radius in dp; a negative value counts as 0. `null` (the default) uses the payment view's
  *   [PayriffPaymentViewStyle.buttonCornerRadius] (16) in [PayriffPaymentView], and 16 in [PayriffGooglePayButton].
- * @property height Height in dp, at least 40: a lower value is raised to 40. `null` (the default) uses the payment
- *   view's [PayriffPaymentViewStyle.buttonHeight] (44) in [PayriffPaymentView], and 44 in [PayriffGooglePayButton].
+ * @property height Height in dp, at least 40: a lower value is raised to 40. `null` (the default) is, in
+ *   [PayriffPaymentView], exactly the Pay button's height as laid out: [PayriffPaymentViewStyle.buttonHeight] (44), or
+ *   more at large text sizes (CONTRACT §20.2); 44 in [PayriffGooglePayButton].
  */
 public data class PayriffGooglePayButtonStyle(
     public val type: PayriffGooglePayButtonType = PayriffGooglePayButtonType.PLAIN,

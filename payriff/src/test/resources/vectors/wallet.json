@@ -1316,5 +1316,488 @@
         "expect": null
       }
     ]
+  },
+  "viewPlacement": {
+    "description": "CONTRACT §20.1 (revision 11). The payment view's content top to bottom while a wallet is offered (walletShown) or not: each shown part with the space above it in points/dp; the first part has 0. The footer (powered by) is laid out apart, as in §16.14. Parts: walletButton, walletDivider, form, payButton, error, badges, secureNote. With belowPayButton the divider never shows, whatever showWalletDivider says.",
+    "cases": [
+      {
+        "name": "top with the divider (the revision 7 layout)",
+        "style": {
+          "walletPlacement": "top",
+          "showWalletDivider": true,
+          "showBadges": true,
+          "showSecureNote": true
+        },
+        "walletShown": true,
+        "errorShown": false,
+        "expect": [
+          {
+            "part": "walletButton",
+            "gapAbove": 0
+          },
+          {
+            "part": "walletDivider",
+            "gapAbove": 16
+          },
+          {
+            "part": "form",
+            "gapAbove": 16
+          },
+          {
+            "part": "payButton",
+            "gapAbove": 24
+          },
+          {
+            "part": "badges",
+            "gapAbove": 24
+          },
+          {
+            "part": "secureNote",
+            "gapAbove": 20
+          }
+        ]
+      },
+      {
+        "name": "top without the divider",
+        "style": {
+          "walletPlacement": "top",
+          "showWalletDivider": false,
+          "showBadges": true,
+          "showSecureNote": true
+        },
+        "walletShown": true,
+        "errorShown": false,
+        "expect": [
+          {
+            "part": "walletButton",
+            "gapAbove": 0
+          },
+          {
+            "part": "form",
+            "gapAbove": 16
+          },
+          {
+            "part": "payButton",
+            "gapAbove": 24
+          },
+          {
+            "part": "badges",
+            "gapAbove": 24
+          },
+          {
+            "part": "secureNote",
+            "gapAbove": 20
+          }
+        ]
+      },
+      {
+        "name": "top with an error line",
+        "style": {
+          "walletPlacement": "top",
+          "showWalletDivider": true,
+          "showBadges": true,
+          "showSecureNote": true
+        },
+        "walletShown": true,
+        "errorShown": true,
+        "expect": [
+          {
+            "part": "walletButton",
+            "gapAbove": 0
+          },
+          {
+            "part": "walletDivider",
+            "gapAbove": 16
+          },
+          {
+            "part": "form",
+            "gapAbove": 16
+          },
+          {
+            "part": "payButton",
+            "gapAbove": 24
+          },
+          {
+            "part": "error",
+            "gapAbove": 8
+          },
+          {
+            "part": "badges",
+            "gapAbove": 24
+          },
+          {
+            "part": "secureNote",
+            "gapAbove": 20
+          }
+        ]
+      },
+      {
+        "name": "top, no wallet offered: exactly §16.14",
+        "style": {
+          "walletPlacement": "top",
+          "showWalletDivider": true,
+          "showBadges": true,
+          "showSecureNote": true
+        },
+        "walletShown": false,
+        "errorShown": false,
+        "expect": [
+          {
+            "part": "form",
+            "gapAbove": 0
+          },
+          {
+            "part": "payButton",
+            "gapAbove": 24
+          },
+          {
+            "part": "badges",
+            "gapAbove": 24
+          },
+          {
+            "part": "secureNote",
+            "gapAbove": 20
+          }
+        ]
+      },
+      {
+        "name": "below Pay: no divider even when showWalletDivider is true",
+        "style": {
+          "walletPlacement": "belowPayButton",
+          "showWalletDivider": true,
+          "showBadges": true,
+          "showSecureNote": true
+        },
+        "walletShown": true,
+        "errorShown": false,
+        "expect": [
+          {
+            "part": "form",
+            "gapAbove": 0
+          },
+          {
+            "part": "payButton",
+            "gapAbove": 24
+          },
+          {
+            "part": "walletButton",
+            "gapAbove": 12
+          },
+          {
+            "part": "badges",
+            "gapAbove": 24
+          },
+          {
+            "part": "secureNote",
+            "gapAbove": 20
+          }
+        ]
+      },
+      {
+        "name": "below Pay with an error line under the wallet button",
+        "style": {
+          "walletPlacement": "belowPayButton",
+          "showWalletDivider": true,
+          "showBadges": true,
+          "showSecureNote": true
+        },
+        "walletShown": true,
+        "errorShown": true,
+        "expect": [
+          {
+            "part": "form",
+            "gapAbove": 0
+          },
+          {
+            "part": "payButton",
+            "gapAbove": 24
+          },
+          {
+            "part": "walletButton",
+            "gapAbove": 12
+          },
+          {
+            "part": "error",
+            "gapAbove": 8
+          },
+          {
+            "part": "badges",
+            "gapAbove": 24
+          },
+          {
+            "part": "secureNote",
+            "gapAbove": 20
+          }
+        ]
+      },
+      {
+        "name": "below Pay without badges",
+        "style": {
+          "walletPlacement": "belowPayButton",
+          "showWalletDivider": true,
+          "showBadges": false,
+          "showSecureNote": true
+        },
+        "walletShown": true,
+        "errorShown": false,
+        "expect": [
+          {
+            "part": "form",
+            "gapAbove": 0
+          },
+          {
+            "part": "payButton",
+            "gapAbove": 24
+          },
+          {
+            "part": "walletButton",
+            "gapAbove": 12
+          },
+          {
+            "part": "secureNote",
+            "gapAbove": 24
+          }
+        ]
+      },
+      {
+        "name": "below Pay with nothing under it",
+        "style": {
+          "walletPlacement": "belowPayButton",
+          "showWalletDivider": false,
+          "showBadges": false,
+          "showSecureNote": false
+        },
+        "walletShown": true,
+        "errorShown": false,
+        "expect": [
+          {
+            "part": "form",
+            "gapAbove": 0
+          },
+          {
+            "part": "payButton",
+            "gapAbove": 24
+          },
+          {
+            "part": "walletButton",
+            "gapAbove": 12
+          }
+        ]
+      },
+      {
+        "name": "below Pay with an error and nothing else under it",
+        "style": {
+          "walletPlacement": "belowPayButton",
+          "showWalletDivider": true,
+          "showBadges": false,
+          "showSecureNote": false
+        },
+        "walletShown": true,
+        "errorShown": true,
+        "expect": [
+          {
+            "part": "form",
+            "gapAbove": 0
+          },
+          {
+            "part": "payButton",
+            "gapAbove": 24
+          },
+          {
+            "part": "walletButton",
+            "gapAbove": 12
+          },
+          {
+            "part": "error",
+            "gapAbove": 8
+          }
+        ]
+      },
+      {
+        "name": "below Pay, no wallet offered: exactly §16.14",
+        "style": {
+          "walletPlacement": "belowPayButton",
+          "showWalletDivider": true,
+          "showBadges": true,
+          "showSecureNote": true
+        },
+        "walletShown": false,
+        "errorShown": true,
+        "expect": [
+          {
+            "part": "form",
+            "gapAbove": 0
+          },
+          {
+            "part": "payButton",
+            "gapAbove": 24
+          },
+          {
+            "part": "error",
+            "gapAbove": 8
+          },
+          {
+            "part": "badges",
+            "gapAbove": 24
+          },
+          {
+            "part": "secureNote",
+            "gapAbove": 20
+          }
+        ]
+      }
+    ]
+  },
+  "viewWalletHeight": {
+    "description": "CONTRACT §20.2 (revision 11). The wallet button's height in the payment view from the wallet style's height (null: not set) and the Pay button's height as laid out (at least buttonHeight, taller at large text sizes; the title stays one line). Both placements. Standalone wallet buttons are unchanged (buttonStyles).",
+    "minHeight": 40,
+    "cases": [
+      {
+        "name": "follows Pay at the default size",
+        "styleHeight": null,
+        "payButtonHeight": 44,
+        "expect": 44
+      },
+      {
+        "name": "follows the app's buttonHeight",
+        "styleHeight": null,
+        "payButtonHeight": 52,
+        "expect": 52
+      },
+      {
+        "name": "follows Pay that grew with large text",
+        "styleHeight": null,
+        "payButtonHeight": 75.5,
+        "expect": 75.5
+      },
+      {
+        "name": "a low Pay is raised to 40",
+        "styleHeight": null,
+        "payButtonHeight": 36,
+        "expect": 40
+      },
+      {
+        "name": "the wallet style's height wins",
+        "styleHeight": 56,
+        "payButtonHeight": 75.5,
+        "expect": 56
+      },
+      {
+        "name": "a low style height is raised to 40",
+        "styleHeight": 30,
+        "payButtonHeight": 44,
+        "expect": 40
+      }
+    ]
+  },
+  "viewReveal": {
+    "description": "CONTRACT §20.3 (revision 11). When the payment view applies a loaded order. Times are in ms. deviceAnswerMs is when the device check (canMakePayments / isReadyToPay) answers, counted from the moment the order arrived: negative = before it, null = never. orderOffered: the order passes §17.3 points 2 and 3; loadFails: the order read failed. expect.appliedAfterMs: when the order is applied (the Pay amount, the error line or view.notPayable, and onOrderLoaded / onLoadFailed), counted from the order's arrival; walletShown: whether the wallet button appears with it; it never appears later for this order. deviceCheckStarted: the device check started when the view appeared, before the order arrived. iOS native answers canMakePayments synchronously, so on iOS every offered case applies at 0.",
+    "waitMs": 1000,
+    "cases": [
+      {
+        "name": "the check answered before the order",
+        "walletConfigured": true,
+        "orderOffered": true,
+        "loadFails": false,
+        "deviceAnswerMs": -200,
+        "deviceAnswer": true,
+        "expect": {
+          "deviceCheckStarted": true,
+          "appliedAfterMs": 0,
+          "walletShown": true
+        }
+      },
+      {
+        "name": "the check answers 300 ms after the order",
+        "walletConfigured": true,
+        "orderOffered": true,
+        "loadFails": false,
+        "deviceAnswerMs": 300,
+        "deviceAnswer": true,
+        "expect": {
+          "deviceCheckStarted": true,
+          "appliedAfterMs": 300,
+          "walletShown": true
+        }
+      },
+      {
+        "name": "the device cannot pay",
+        "walletConfigured": true,
+        "orderOffered": true,
+        "loadFails": false,
+        "deviceAnswerMs": 100,
+        "deviceAnswer": false,
+        "expect": {
+          "deviceCheckStarted": true,
+          "appliedAfterMs": 100,
+          "walletShown": false
+        }
+      },
+      {
+        "name": "the check is too slow: no wallet for this order",
+        "walletConfigured": true,
+        "orderOffered": true,
+        "loadFails": false,
+        "deviceAnswerMs": 1500,
+        "deviceAnswer": true,
+        "expect": {
+          "deviceCheckStarted": true,
+          "appliedAfterMs": 1000,
+          "walletShown": false
+        }
+      },
+      {
+        "name": "the check never answers",
+        "walletConfigured": true,
+        "orderOffered": true,
+        "loadFails": false,
+        "deviceAnswerMs": null,
+        "deviceAnswer": null,
+        "expect": {
+          "deviceCheckStarted": true,
+          "appliedAfterMs": 1000,
+          "walletShown": false
+        }
+      },
+      {
+        "name": "an order the wallet cannot pay is applied at once",
+        "walletConfigured": true,
+        "orderOffered": false,
+        "loadFails": false,
+        "deviceAnswerMs": 500,
+        "deviceAnswer": true,
+        "expect": {
+          "deviceCheckStarted": true,
+          "appliedAfterMs": 0,
+          "walletShown": false
+        }
+      },
+      {
+        "name": "a failed order read is applied at once",
+        "walletConfigured": true,
+        "orderOffered": false,
+        "loadFails": true,
+        "deviceAnswerMs": 500,
+        "deviceAnswer": true,
+        "expect": {
+          "deviceCheckStarted": true,
+          "appliedAfterMs": 0,
+          "walletShown": false
+        }
+      },
+      {
+        "name": "no wallet configured: no device check",
+        "walletConfigured": false,
+        "orderOffered": false,
+        "loadFails": false,
+        "deviceAnswerMs": null,
+        "deviceAnswer": null,
+        "expect": {
+          "deviceCheckStarted": false,
+          "appliedAfterMs": 0,
+          "walletShown": false
+        }
+      }
+    ]
   }
 }

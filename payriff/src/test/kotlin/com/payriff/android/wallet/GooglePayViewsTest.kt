@@ -14,6 +14,7 @@ import com.payriff.android.PayriffPayment
 import com.payriff.android.PayriffPaymentStatus
 import com.payriff.android.PayriffPaymentViewStyle
 import com.payriff.android.PayriffResult
+import com.payriff.android.PayriffWalletPlacement
 import com.payriff.android.card.CLIENT_SECRET
 import com.payriff.android.card.FakeTransport
 import com.payriff.android.card.PUBLISHABLE_KEY
@@ -29,13 +30,16 @@ import com.payriff.android.internal.card.PaymentViewState
 import com.payriff.android.internal.wallet.GooglePayAvailability
 import com.payriff.android.internal.wallet.GooglePayButtonController
 import com.payriff.android.internal.wallet.GooglePayTransaction
+import com.payriff.android.internal.wallet.GooglePayViewDecision
 import com.payriff.android.testing.HostAppRule
 import com.payriff.android.testing.LogCapture
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -123,15 +127,26 @@ class GooglePayViewsTest {
             assertEquals(PayriffGooglePayButtonStyle(), googlePayButton)
             assertNull(walletDividerText)
             assertTrue(showWalletDivider)
+            assertEquals(PayriffWalletPlacement.TOP, walletPlacement)
         }
         val googlePayButton = PayriffGooglePayButtonStyle(type = PayriffGooglePayButtonType.PAY, height = 52f)
         val built = PayriffPaymentViewStyle.Builder()
             .googlePayButton(googlePayButton)
             .walletDividerText("or")
             .showWalletDivider(false)
+            .walletPlacement(PayriffWalletPlacement.BELOW_PAY_BUTTON)
             .build()
-        assertEquals(PayriffPaymentViewStyle(googlePayButton = googlePayButton, walletDividerText = "or", showWalletDivider = false), built)
+        assertEquals(
+            PayriffPaymentViewStyle(
+                googlePayButton = googlePayButton,
+                walletDividerText = "or",
+                showWalletDivider = false,
+                walletPlacement = PayriffWalletPlacement.BELOW_PAY_BUTTON,
+            ),
+            built,
+        )
         assertEquals(built, built.newBuilder().build())
+        assertEquals(listOf("TOP", "BELOW_PAY_BUTTON"), PayriffWalletPlacement.entries.map { it.name })
     }
 
     // endregion
@@ -145,10 +160,10 @@ class GooglePayViewsTest {
         val state = PaymentViewState()
         assertFalse(state.isGooglePayShown)
         state.orderDidLoad(order(methods = listOf("GOOGLE_PAY")))
-        assertTrue(state.needsGooglePayDecision)
+        assertFalse(state.isGooglePayDecided)
         assertFalse("undecided: not shown", state.isGooglePayShown)
         state.googlePayDidDecide(offer)
-        assertFalse(state.needsGooglePayDecision)
+        assertTrue(state.isGooglePayDecided)
         assertTrue(state.isGooglePayShown && state.isGooglePayEnabled)
         // An order without CARD: Pay stays disabled with view.notPayable, the wallet button stays usable.
         state.isFormComplete = true
@@ -187,14 +202,15 @@ class GooglePayViewsTest {
         assertFalse(blocked.isGooglePayDecided)
     }
 
-    private class Harness(scope: CoroutineScope, decide: suspend (PayriffClientOrder) -> GooglePayTransaction?) {
+    /** A payment view whose Google Pay decision for each load comes from [startGooglePay]. */
+    private class Harness(scope: CoroutineScope, startGooglePay: (CoroutineScope) -> (suspend (PayriffClientOrder) -> GooglePayTransaction?)) {
         val delivered = mutableListOf<PayriffResult>()
         val controller = PaymentViewController(
             scope = scope,
             loadOrder = { orderId, clientSecret -> Payriff.retrieveOrder(orderId, clientSecret) },
             onStateChanged = {},
             deliver = { delivered += it },
-            decideGooglePay = decide,
+            startGooglePay = startGooglePay,
         )
         val state: PaymentViewState get() = controller.state
     }
@@ -207,9 +223,11 @@ class GooglePayViewsTest {
         api.on("GET", orderPath, http(200, ok(googlePayOrder)))
         val decided = mutableListOf<PayriffClientOrder>()
         var ready = true
-        val view = Harness(this) { order ->
-            decided += order
-            GooglePayAvailability.decide(Payriff.config, canPresent = true, order = order, appName = "Example Shop") { ready }
+        val view = Harness(this) {
+            { order ->
+                decided += order
+                GooglePayAvailability.decide(Payriff.config, canPresent = true, order = order, appName = "Example Shop") { ready }
+            }
         }
         view.controller.setOrder("o1", CLIENT_SECRET)
         view.controller.appear()
@@ -239,29 +257,42 @@ class GooglePayViewsTest {
     }
 
     @Test
-    fun aDecisionInterruptedByLeavingTheWindowRunsAgain() = runTest {
+    fun aDecisionInterruptedByLeavingTheWindowRunsAgainWithoutAnotherRead() = runTest {
         val api = fakeApi()
-        api.on("GET", orderPath, http(200, ok(googlePayOrder)))
+        api.on("GET", orderPath, http(200, ok(googlePayOrder), delayMillis = 300))
         val answers = mutableListOf<CompletableDeferred<Boolean>>()
-        val view = Harness(this) { order ->
-            GooglePayAvailability.decide(Payriff.config, canPresent = true, order = order, appName = null) {
+        val view = Harness(this) { scope ->
+            GooglePayViewDecision(scope, Payriff.config, canPresent = true, appName = null) {
                 CompletableDeferred<Boolean>().also { answers += it }.await()
-            }
+            }::decide
         }
         view.controller.setOrder("o1", CLIENT_SECRET)
         view.controller.appear()
-        advanceUntilIdle()
-        assertEquals(1, answers.size)
+        runCurrent()
+        assertEquals("the device is asked when the load starts", 1, answers.size)
+        // The order arrived at 300 ms; the decision waits for the device, and nothing is applied meanwhile.
+        advanceTimeBy(800)
+        assertSame(PaymentViewState.Order.Loading, view.state.order)
         view.controller.disappear()
         advanceUntilIdle()
+        assertSame(PaymentViewState.Order.Loading, view.state.order)
         assertFalse(view.state.isGooglePayDecided)
+
+        // Appearing again asks the device again, without another read, and waits at most a second from now.
         view.controller.appear()
-        advanceUntilIdle()
-        assertEquals("decided again, without another load", 2, answers.size)
+        runCurrent()
+        assertEquals(2, answers.size)
         assertEquals(1, api.requests.size)
+        advanceTimeBy(500)
         answers.last().complete(true)
+        runCurrent()
+        assertTrue(view.state.order is PaymentViewState.Order.Payable)
+        assertTrue("the order and Google Pay together", view.state.isGooglePayShown)
+        // The first check's answer is no longer awaited, and the decision is logged once.
+        answers.first().complete(false)
         advanceUntilIdle()
         assertTrue(view.state.isGooglePayShown)
+        assertEquals(listOf("Google Pay offered: true"), logs.lines.filter { "Google Pay offered" in it }.map { it.substringAfter("[DEBUG] ") })
     }
 
     @Test
@@ -275,7 +306,7 @@ class GooglePayViewsTest {
             onStateChanged = {},
             deliver = { delivered += it },
             deviceBlock = { PayriffError(PayriffErrorCode.DEVICE_COMPROMISED, "Card payments are not available on this device.") },
-            decideGooglePay = { decided += it; null },
+            startGooglePay = { { decided += it; null } },
         )
         controller.setOrder("o1", CLIENT_SECRET)
         controller.appear()
@@ -291,7 +322,7 @@ class GooglePayViewsTest {
     fun aWalletResultGoesToTheListenerAndAClosedSheetReportsNothing() = runTest {
         val api = fakeApi()
         api.on("GET", orderPath, http(200, ok(googlePayOrder)))
-        val view = Harness(this) { offer }
+        val view = Harness(this) { { offer } }
         view.controller.setOrder("o1", CLIENT_SECRET)
         view.controller.appear()
         advanceUntilIdle()
@@ -317,7 +348,7 @@ class GooglePayViewsTest {
         view.controller.payWithGooglePay { _, _, _ -> throw AssertionError("the order is not paid twice") }
 
         // A payment that continues after a recreation makes the view busy until its result.
-        val resumed = Harness(this) { offer }
+        val resumed = Harness(this) { { offer } }
         resumed.controller.paymentResumed()
         assertTrue(resumed.state.isPaying)
         resumed.controller.paymentResumed()

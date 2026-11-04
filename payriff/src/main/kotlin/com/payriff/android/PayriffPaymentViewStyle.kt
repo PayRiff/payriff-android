@@ -3,6 +3,25 @@ package com.payriff.android
 import androidx.annotation.ColorInt
 
 /**
+ * Where [PayriffPaymentView] shows the wallet button, Google Pay, while it is offered (CONTRACT §20.1,
+ * [PayriffPaymentViewStyle.walletPlacement]). Without a wallet button both placements show the card screen alone.
+ */
+public enum class PayriffWalletPlacement {
+    /**
+     * Above the card form, the default: the wallet button, the "Or pay by card" divider 16 dp below it (unless
+     * [PayriffPaymentViewStyle.showWalletDivider] is `false`), then the form 16 dp below.
+     */
+    TOP,
+
+    /**
+     * Under the Pay button: the form and Pay first, the wallet button 12 dp below Pay, then the error line, the badges
+     * and the secure line. There is no divider, so [PayriffPaymentViewStyle.showWalletDivider] and
+     * [PayriffPaymentViewStyle.walletDividerText] have no effect.
+     */
+    BELOW_PAY_BUTTON,
+}
+
+/**
  * The look of [PayriffPaymentView] (CONTRACT §16.14). Every property is optional: the defaults reproduce the card
  * payment part of Payriff's hosted payment page (pay.payriff.com) and follow the system light or dark theme, unless you
  * set a colour.
@@ -25,7 +44,8 @@ import androidx.annotation.ColorInt
  * @property buttonColor The Pay button; `null` is Payriff's brand colour `#4DBDC6`.
  * @property buttonTextStyle The Pay button's label ("Pay 1.02 AZN"), merged over the default: 16 sp semibold, white.
  *   The spinner shown while paying uses its colour.
- * @property buttonHeight Height of the Pay button in dp; it grows with large text. Defaults to 44.
+ * @property buttonHeight Height of the Pay button in dp; it grows with large text, while its title stays one line.
+ *   Defaults to 44.
  * @property buttonCornerRadius Corner radius of the Pay button in dp. Defaults to 16.
  * @property payButtonLabel The word of the Pay button, in place of "Pay" in the view's language; it is shown as it is in
  *   every language. The amount and the currency still follow it ("Pay now 1.02 AZN"), and it shows alone while the
@@ -42,13 +62,15 @@ import androidx.annotation.ColorInt
  *   `PayriffCardFormStyle(showLabels = false)` hides "Card holder" and "Card information". Its error colour and error
  *   text style are also used for the view's error line under the Pay button, and its border colour for the lines of the
  *   wallet divider.
- * @property googlePayButton The Google Pay button above the form, when Google Pay is offered ([PayriffConfig.googlePay],
- *   CONTRACT §17.9): Google's official button with its type, theme, corner radius and height. Without its own height and
- *   corner radius it takes [buttonHeight] and [buttonCornerRadius].
+ * @property googlePayButton The Google Pay button, when Google Pay is offered ([PayriffConfig.googlePay], CONTRACT
+ *   §17.9): Google's official button with its type, theme, corner radius and height. Without its own height it is
+ *   exactly as high as the Pay button as laid out, also at large text sizes (CONTRACT §20.2); without its own corner
+ *   radius it takes [buttonCornerRadius]. At least 40 dp high.
  * @property walletDividerText The text of the divider between the wallet button and the form, in place of "Or pay by
  *   card" in the view's language, trimmed. `null` (the default) or a blank text keeps the localized text.
  * @property showWalletDivider Shows the divider ("Or pay by card" between two lines) under the wallet button. Defaults to
- *   `true`. Without a wallet button there is never a divider.
+ *   `true`. Without a wallet button, or with [walletPlacement] [PayriffWalletPlacement.BELOW_PAY_BUTTON], there is never
+ *   a divider.
  * @property payButtonTitle The Pay button's whole text in every state, trimmed, for example "Pay €12": no amount or
  *   currency is added, even while the amount is unknown, and the spinner still replaces it while paying. It wins over
  *   [payButtonLabel] and [PayriffStrings.pay]. `null` (the default) or a blank text keeps the word and the amount.
@@ -64,6 +86,9 @@ import androidx.annotation.ColorInt
  * @property buttonDisabledTextColor The disabled Pay button's title and spinner; see [buttonDisabledColor].
  * @property badgeBorderColor The frames of the Mastercard and Visa badges; `null` is `#ECEEF0`. It also colours the
  *   border of the brand mark box in the card number field, unless [PayriffCardFormStyle.brandMarkBorderColor] is set.
+ * @property walletPlacement Where the Google Pay button goes while it is offered (CONTRACT §20.1): above the form
+ *   ([PayriffWalletPlacement.TOP], the default) or 12 dp below the Pay button, without the divider
+ *   ([PayriffWalletPlacement.BELOW_PAY_BUTTON]).
  */
 public data class PayriffPaymentViewStyle(
     @ColorInt public val backgroundColor: Int? = null,
@@ -87,6 +112,7 @@ public data class PayriffPaymentViewStyle(
     @ColorInt public val buttonDisabledColor: Int? = null,
     @ColorInt public val buttonDisabledTextColor: Int? = null,
     @ColorInt public val badgeBorderColor: Int? = null,
+    public val walletPlacement: PayriffWalletPlacement = PayriffWalletPlacement.TOP,
 ) {
 
     /** Returns a [Builder] pre-filled with this style. */
@@ -160,6 +186,9 @@ public data class PayriffPaymentViewStyle(
 
         /** Sets [PayriffPaymentViewStyle.badgeBorderColor]. */
         public fun badgeBorderColor(@ColorInt value: Int?): Builder = apply { style = style.copy(badgeBorderColor = value) }
+
+        /** Sets [PayriffPaymentViewStyle.walletPlacement]. */
+        public fun walletPlacement(value: PayriffWalletPlacement): Builder = apply { style = style.copy(walletPlacement = value) }
 
         /** Creates the style. */
         public fun build(): PayriffPaymentViewStyle = style

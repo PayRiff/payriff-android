@@ -71,11 +71,11 @@ dependencyResolutionManagement {
 
 // app/build.gradle.kts
 dependencies {
-    implementation("com.payriff:payriff-android:1.0.0-rc.6")
+    implementation("com.payriff:payriff-android:1.0.0-rc.7")
 }
 ```
 
-`1.0.0-rc.6` is the release candidate of 1.0.0. The coordinates stay the same when the SDK also goes to Maven
+`1.0.0-rc.7` is the release candidate of 1.0.0. The coordinates stay the same when the SDK also goes to Maven
 Central; then the `maven(...)` line can go.
 
 The library manifest is merged into your app automatically. It adds the `INTERNET` permission, the 3-D Secure activity, a small start-up provider (see [Platform notes](#platform-notes)) and the Google Pay API's `com.google.android.gms.wallet.api.enabled` meta-data. Google Play services' own manifests, which come with `play-services-wallet`, add `ACCESS_NETWORK_STATE`, a query for the Google Maps app, OpenGL ES 2.0 as a required feature, the optional `org.apache.http.legacy` library and Google's `GoogleApiActivity` (not exported). No ProGuard/R8 rules are required.
@@ -382,7 +382,7 @@ paymentView.setOnLoadFailedListener { error -> offerAnotherWayToPay(error) }
 ```
 
 - `onPaymentStarted` runs once per attempt, before anything is sent: when Pay is tapped with a valid form, or when the Google Pay button is tapped, before its sheet opens.
-- `onOrderLoaded` runs after every successful load of the order, also when it cannot be paid by card.
+- `onOrderLoaded` runs after every successful load of the order, also when it cannot be paid by card, right after the view shows the order (with Google Pay, when it is offered).
 - `onLoadFailed` runs when the view gets no order: every failed load, and once per order with `DEVICE_COMPROMISED` on a compromised device. A fatal error still also goes to `onResultListener`, once.
 - They run on the main thread. Set them when you create the view, before `setOrder`.
 
@@ -410,7 +410,7 @@ Payriff.configure(
 
 **When it shows.** Your config decides, not the order's `paymentMethods`: the Google Pay button appears only once all of these are known: `googlePay` is set; the device is not compromised; the order's status is `CREATED` or `PENDING`, with an amount and a currency; a gateway merchant id comes from the order's `googlePay` or from `PayriffGooglePayConfig.gatewayMerchantId`; and Google Pay's `isReadyToPay` says the device can pay with Visa or Mastercard. Until then the payment view is the card screen alone. With logging on, one debug line per order says why, for example `Google Pay offered: false (no gatewayMerchantId)`. Whether Payriff accepts the token for the order is decided at `/pay`: if it does not, that payment fails there.
 
-**In the payment view.** The button sits at the top, then "Or pay by card" between two lines, then the card form. While any payment runs, the form is locked, Pay shows its spinner and the Google Pay button is dimmed. The Google Pay result goes to `onResultListener` like a card result. Closing the Google Pay sheet reports nothing, so the customer can try again or pay by card. For an order without `CARD`, Pay stays disabled ("This order cannot be paid by card") and Google Pay stays usable.
+**In the payment view.** The button sits at the top, then "Or pay by card" between two lines, then the card form. With `walletPlacement = PayriffWalletPlacement.BELOW_PAY_BUTTON` it sits 12 dp below Pay instead, above the error line, the badges and the secure line, and there is no divider (`showWalletDivider` and `walletDividerText` then do nothing). Without its own `height` the button is exactly as high as Pay, at every font scale; Pay's title stays one line, and a long title is truncated. The button appears together with the loaded order, in its place and without animation: `isReadyToPay` runs alongside the order read, and the view waits for it at most 1 s after the order arrived. A slower answer means no Google Pay for that order (`Google Pay offered: false (the device check did not answer in time)`). An order that did not load, or that Google Pay cannot take, shows at once. While any payment runs, the form is locked, Pay shows its spinner and the Google Pay button is dimmed. The Google Pay result goes to `onResultListener` like a card result. Closing the Google Pay sheet reports nothing, so the customer can try again or pay by card. For an order without `CARD`, Pay stays disabled ("This order cannot be paid by card") and Google Pay stays usable.
 
 **Button style.** Google's brand rules allow nothing else to draw the Google Pay mark, so the button is always Google's `PayButton`, with these options (`PayriffPaymentViewStyle.googlePayButton`, or `PayriffGooglePayButton.style`):
 
@@ -419,9 +419,9 @@ Payriff.configure(
 | `type` | `PLAIN`: the mark alone. `BUY`, `PAY`, `CHECKOUT`, `BOOK`, `DONATE`, `ORDER` and `SUBSCRIBE` add Google's localized text. |
 | `theme` | `AUTOMATIC`: a dark button in the light theme and a light one in the dark theme. Or `DARK`, `LIGHT`. |
 | `cornerRadius` | `null`: the payment view's `buttonCornerRadius` (16 dp), or 16 dp in the standalone button. A negative value counts as 0. |
-| `height` | `null`: the payment view's `buttonHeight` (44 dp), or 44 dp in the standalone button. At least 40 dp. |
+| `height` | `null`: in the payment view, exactly the Pay button's height as laid out (`buttonHeight`, 44 dp, or more at a large font scale); 44 dp in the standalone button. At least 40 dp. |
 
-The payment view's style also has `walletDividerText` (`null`: "Or pay by card" in the view's language; trimmed) and `showWalletDivider` (`true`).
+The payment view's style also has `walletPlacement` (`TOP`; `BELOW_PAY_BUTTON` puts the button under Pay, without the divider), `walletDividerText` (`null`: "Or pay by card" in the view's language; trimmed) and `showWalletDivider` (`true`).
 
 ```kotlin
 paymentView.style = PayriffPaymentViewStyle(
@@ -710,7 +710,7 @@ SDK logging is on, so the SDK's lines appear in Logcat (tag `Payriff`). The exam
 | `Failed(DEVICE_COMPROMISED)`, or Pay disabled with "Card payments aren't available on this device" | The device looks rooted, a hooking framework (Frida, Xposed) is loaded, or the check could not complete. With `enableLogging = true` a warning names the signals, for example `Magisk` or `check failed`. For development on such a device, set `PayriffConfig(allowCompromisedDevices = true)` in a debug build. A release build ignores it and logs that `allowCompromisedDevices` is ignored outside debug builds. |
 | `Failed(NETWORK_ERROR)` with "Payriff's server certificate could not be verified" | A debugging proxy (or a device with an injected CA) is intercepting TLS. Certificate pinning refuses it; remove the proxy. Debug builds log requests and responses, so you do not need to proxy to see the traffic. |
 | `Pending(NOT_FINAL)` | The status was not final in time, or the customer closed the 3-D Secure sheet. Confirm it on your backend; Payriff's callback will arrive there. |
-| The Google Pay button does not appear | With `enableLogging = true`, the debug line `Google Pay offered: false (…)` names the first missing condition: `PayriffConfig.googlePay` is not set, `no gatewayMerchantId` (neither the order nor `PayriffGooglePayConfig.gatewayMerchantId` has one), the order's status, amount or currency (the sandbox has no wallets), the device failed the integrity check, or `isReadyToPay` is false (Google Pay is not available on the device, for example without Google Play services). |
+| The Google Pay button does not appear | With `enableLogging = true`, the debug line `Google Pay offered: false (…)` names the first missing condition: `PayriffConfig.googlePay` is not set, `no gatewayMerchantId` (neither the order nor `PayriffGooglePayConfig.gatewayMerchantId` has one), the order's status, amount or currency (the sandbox has no wallets), the device failed the integrity check, `isReadyToPay` is false (Google Pay is not available on the device, for example without Google Play services), or `the device check did not answer in time` (`isReadyToPay` took more than 1 s after the order arrived). |
 | `Failed(WALLET_FAILED)` with `Google Pay failed (status 10).` | Google Pay refused the request as a developer error. Check that the app has production access in the Google Pay & Wallet Console and that `merchantId` belongs to it; Logcat shows Google's reason under the tag `WalletMerchantError`. |
 | Screenshots or screen recordings of the form are black | That is the screen protection (`FLAG_SECURE`). For QA in a debug build, set `allowScreenCaptureInDebug = true`. |
 | `IllegalStateException: LifecycleOwner … is attempting to register while current state is RESUMED` | Create `PayriffCardPaymentLauncher` while the activity or fragment is created, not in a click handler. |

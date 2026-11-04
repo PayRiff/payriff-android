@@ -13,6 +13,7 @@ import android.view.Gravity
 import android.view.View
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.core.graphics.withTranslation
@@ -64,7 +65,7 @@ internal class PayButton(context: Context) : FrameLayout(context) {
         setPaddingRelative(h, v, h, v)
 
         label.gravity = Gravity.CENTER
-        label.maxLines = 1
+        label.maxLines = PaymentViewPlan.BUTTON_TITLE_MAX_LINES
         label.ellipsize = TextUtils.TruncateAt.END
         // The button itself carries the title for accessibility services.
         label.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
@@ -119,6 +120,59 @@ internal class PayButton(context: Context) : FrameLayout(context) {
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
+}
+
+/**
+ * The parts of [com.payriff.android.PayriffPaymentView] top to bottom (CONTRACT §16.14, §17.9, §20): a vertical
+ * [LinearLayout] whose children [arrange] puts in the plan's order, and which measures the wallet button at exactly
+ * [walletHeight] of the Pay button's height, in the same measure pass (CONTRACT §20.2).
+ */
+internal class PaymentViewContent(context: Context) : LinearLayout(context) {
+
+    /** The Pay button, whose measured height the wallet button follows. */
+    var payButton: View? = null
+
+    /** The wallet button. */
+    var walletButton: View? = null
+
+    /** The wallet button's height in pixels for the Pay button's measured height in pixels. */
+    var walletHeight: (payButtonHeightPx: Int) -> Int = { it }
+
+    init {
+        orientation = VERTICAL
+    }
+
+    /**
+     * Puts the children in [order], which holds each of them once. They are moved without leaving the window, so the
+     * form keeps its focus and what was typed.
+     */
+    fun arrange(order: List<View>) {
+        if (order.size == childCount && order.indices.all { getChildAt(it) === order[it] }) return
+        order.forEach { detachViewFromParent(it) }
+        order.forEachIndexed { index, child -> attachViewToParent(child, index, child.layoutParams) }
+        requestLayout()
+        invalidate()
+    }
+
+    /**
+     * Measures the wallet button at exactly [walletHeight] of the Pay button's height in this pass: when Pay comes after
+     * it, Pay is measured first. Every other child is measured as a [LinearLayout] measures it.
+     */
+    override fun measureChildWithMargins(child: View, parentWidthMeasureSpec: Int, widthUsed: Int, parentHeightMeasureSpec: Int, heightUsed: Int) {
+        val pay = payButton
+        if (child !== walletButton || pay == null) {
+            super.measureChildWithMargins(child, parentWidthMeasureSpec, widthUsed, parentHeightMeasureSpec, heightUsed)
+            return
+        }
+        val payShown = pay.visibility != GONE
+        if (payShown && indexOfChild(pay) > indexOfChild(child)) {
+            super.measureChildWithMargins(pay, parentWidthMeasureSpec, 0, MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED), 0)
+        }
+        val params = child.layoutParams as MarginLayoutParams
+        val widthSpec = getChildMeasureSpec(parentWidthMeasureSpec, paddingLeft + paddingRight + params.leftMargin + params.rightMargin + widthUsed, params.width)
+        val height = walletHeight(if (payShown) pay.measuredHeight else 0)
+        child.measure(widthSpec, MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY))
+    }
 }
 
 /**

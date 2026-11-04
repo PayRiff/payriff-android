@@ -12,7 +12,7 @@ import java.io.File
  *
  * The card vectors (`card_*.json`, CONTRACT §16, §19) and `corner_smoothing.json` (§18.2) are asserted by the `card`
  * test package, `strings_override.json` (§18.6) by this package, and the Android sections of `wallet.json`
- * (CONTRACT §17) by the `wallet` test package. Revision 5 archived the
+ * (CONTRACT §17, §20) by the `wallet` test package. Revision 5 archived the
  * hosted-flow vectors (`api.json`, `navigation.json`, `payment_url_order_id.json`, `amount.json`); they are no longer
  * synced, and this test fails if one comes back.
  */
@@ -118,6 +118,10 @@ class VectorCoverageTest {
                 // Revision 10.
                 "platformGuard" to "GooglePayVectorsTest.platformGuardAndroidRows (the android rows)",
                 "googlePayGateway" to "GooglePayVectorsTest.googlePayGatewayComesFromTheOrderThenTheConfig",
+                // Revision 11 (CONTRACT §20).
+                "viewPlacement" to "WalletViewVectorsTest.viewPlacementPartsAndGaps",
+                "viewWalletHeight" to "WalletViewVectorsTest.viewWalletHeightFollowsPayUnlessTheStyleSetsOne",
+                "viewReveal" to "WalletViewVectorsTest.viewRevealAppliesTheOrderAndTheDecisionTogether",
             ),
             "card_validation.json" to mapOf(
                 "description" to "-",

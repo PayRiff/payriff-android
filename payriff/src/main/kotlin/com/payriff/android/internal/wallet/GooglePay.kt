@@ -16,6 +16,11 @@ import com.payriff.android.internal.card.CardFormStyles
 import com.payriff.android.internal.card.ClientApiHosts
 import com.payriff.android.internal.card.PaymentViewPlan
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -184,6 +189,15 @@ internal object GooglePayAvailability {
     const val NO_GATEWAY_MERCHANT_ID = "no gatewayMerchantId"
 
     /**
+     * How long the payment view waits for the device check once the order arrived, in ms (CONTRACT §20.3,
+     * `wallet.json` → `viewReveal` → `waitMs`).
+     */
+    const val WAIT_MS = 1_000L
+
+    /** The reason Google Pay is not offered when the device check did not answer within [WAIT_MS] (CONTRACT §20.3). */
+    const val DEVICE_CHECK_TOO_SLOW = "the device check did not answer in time"
+
+    /**
      * Why [order] cannot be paid with Google Pay with [config] (CONTRACT §17.3 item 3, revision 10), or `null` when it
      * can: the status must be `CREATED` or `PENDING`, a gateway merchant id must come from the order's `googlePay` or
      * from [config] ([GooglePayRequests.gateway]), and the order needs an amount and a currency for the total. The
@@ -202,29 +216,39 @@ internal object GooglePayAvailability {
      * Decides CONTRACT §17.3 for [order], in its order: [config] sets Google Pay and the button can be shown
      * ([canPresent]: a `ComponentActivity` hosts it), the order allows it ([orderProblem]; the caller already checked the
      * device when the view appeared), and the device can pay ([isReadyToPay] with the `isReadyToPayRequest`; an error is
-     * `false`). Logs the decision. Returns the payment's values when Google Pay is offered, otherwise `null`.
+     * `false`). With [waitMs], an answer that takes longer counts as `false` (CONTRACT §20.3); without it, the answer is
+     * awaited. Logs the decision. Returns the payment's values when Google Pay is offered, otherwise `null`.
      */
     suspend fun decide(
         config: PayriffConfig?,
         canPresent: Boolean,
         order: PayriffClientOrder,
         appName: String?,
+        waitMs: Long? = null,
         isReadyToPay: suspend (request: String) -> Boolean,
     ): GooglePayTransaction? {
         val googlePay = config?.googlePay ?: return notOffered(NOT_CONFIGURED)
         if (!canPresent) return notOffered(NO_HOST)
         orderProblem(order, googlePay)?.let { return notOffered(it) }
         val transaction = GooglePayRequests.transaction(googlePay, order, config.region, appName) ?: return notOffered("the order has no Google Pay total")
-        val ready = try {
-            isReadyToPay(GooglePayRequests.isReadyToPayRequest().toString())
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (e: Exception) {
-            false
+        val request = GooglePayRequests.isReadyToPayRequest().toString()
+        val ready = if (waitMs == null) {
+            isReady(isReadyToPay, request)
+        } else {
+            withTimeoutOrNull(waitMs) { isReady(isReadyToPay, request) } ?: return notOffered(DEVICE_CHECK_TOO_SLOW)
         }
         if (!ready) return notOffered("isReadyToPay is false")
         PayriffLog.debug { "Google Pay offered: true" }
         return transaction
+    }
+
+    /** [isReadyToPay] with [request]; an error counts as `false`. */
+    suspend fun isReady(isReadyToPay: suspend (request: String) -> Boolean, request: String): Boolean = try {
+        isReadyToPay(request)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (e: Exception) {
+        false
     }
 
     /** Logs that Google Pay is not offered because of [reason]; always `null`. */
@@ -237,6 +261,37 @@ internal object GooglePayAvailability {
     fun deviceBlocked(config: PayriffConfig?) {
         notOffered(if (config?.googlePay == null) NOT_CONFIGURED else DEVICE_BLOCKED)
     }
+}
+
+/**
+ * CONTRACT §17.3 for one load of [com.payriff.android.PayriffPaymentView]'s order, timed as §20.3 says. It is created
+ * when the load starts: when [config] sets Google Pay and the view can show it ([canPresent]), the device check
+ * ([isReadyToPay] with the `isReadyToPayRequest`; an error is `false`) starts at once in [scope], alongside the order
+ * read. [decide] then decides for the order that arrived: at once when the order cannot take Google Pay, else when the
+ * device answers, at most [GooglePayAvailability.WAIT_MS] later. The caller cancels what this started in [scope] once
+ * it has the decision, so a later answer is ignored.
+ */
+internal class GooglePayViewDecision(
+    scope: CoroutineScope,
+    private val config: PayriffConfig?,
+    private val canPresent: Boolean,
+    private val appName: String?,
+    isReadyToPay: suspend (request: String) -> Boolean,
+) {
+    /** The device's answer; it stays open while the check runs, and when there is none. */
+    private val answer = CompletableDeferred<Boolean>()
+
+    init {
+        if (config?.googlePay != null && canPresent) {
+            val request = GooglePayRequests.isReadyToPayRequest().toString()
+            // Undispatched: the check is asked before the caller reads the order.
+            scope.launch(start = CoroutineStart.UNDISPATCHED) { answer.complete(GooglePayAvailability.isReady(isReadyToPay, request)) }
+        }
+    }
+
+    /** The decision for [order], which has just arrived ([GooglePayAvailability.decide]); it is logged. */
+    suspend fun decide(order: PayriffClientOrder): GooglePayTransaction? =
+        GooglePayAvailability.decide(config, canPresent, order, appName, waitMs = GooglePayAvailability.WAIT_MS) { answer.await() }
 }
 
 /** What the Google Pay sheet returned (CONTRACT §17.5 step 3). Nothing of Google's `PaymentData` is ever logged. */

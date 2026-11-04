@@ -1,3 +1,26 @@
+## [1.0.0-rc.7] - 2026-11-05
+
+Wallet placement, height and reveal (CONTRACT revision 11, §20). Without the new option the payment view is laid out as
+in 1.0.0-rc.6, except that the Google Pay button keeps Pay's height and appears together with the order.
+
+### Added
+
+- `PayriffPaymentViewStyle.walletPlacement` (`PayriffWalletPlacement`, default `TOP`), with its `Builder` setter.
+  `BELOW_PAY_BUTTON` puts the Google Pay button 12 dp below Pay, then the error line, the badges and the secure line.
+  The divider never shows there, so `showWalletDivider` and `walletDividerText` have no effect.
+
+### Changed
+
+- The Google Pay button of the payment view follows Pay's height at every text size: without its own `height` it is
+  exactly as high as Pay as laid out, in the same layout pass, and at least 40 dp. Pay's title stays one line, so Pay
+  grows only with the font scale. A style `height` keeps that height, at least 40 dp. The standalone
+  `PayriffGooglePayButton` is unchanged.
+- Google Pay appears together with the loaded order, without a late pop-in or animation: the `isReadyToPay` device
+  check runs alongside the order read, and the view shows the order and the decision in one update, waiting at most
+  1 s after the order arrived. A slower check means no Google Pay for that order, logged as
+  `Google Pay offered: false (the device check did not answer in time)`. An order that did not load, or that Google Pay
+  cannot take, shows at once. `onOrderLoaded` runs right after the order is shown.
+
 ## [1.0.0-rc.6] - 2026-11-04
 
 Wallets follow the merchant's config (CONTRACT revision 10).

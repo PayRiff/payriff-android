@@ -6,13 +6,16 @@ import com.payriff.android.PayriffClientOrder
 import com.payriff.android.PayriffLanguage
 import com.payriff.android.PayriffPaymentViewStyle
 import com.payriff.android.PayriffTextStyle
+import com.payriff.android.PayriffWalletPlacement
 import com.payriff.android.R
+import com.payriff.android.internal.wallet.GooglePayButtonStyles
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.util.WeakHashMap
+import kotlin.math.max
 
 /**
- * What [com.payriff.android.PayriffPaymentView] shows, top to bottom, and its copy (CONTRACT §16.14, §17.9). Pure
+ * What [com.payriff.android.PayriffPaymentView] shows, top to bottom, and its copy (CONTRACT §16.14, §17.9, §20). Pure
  * Kotlin, so the JVM unit tests check the structure the view is built from.
  */
 internal object PaymentViewPlan {
@@ -28,6 +31,9 @@ internal object PaymentViewPlan {
 
     /** The card form, 16 below the wallet divider, or below the wallet button when the style hides the divider. */
     const val WALLET_FORM_GAP_DP = 16
+
+    /** The wallet button, 12 below the Pay button with [PayriffWalletPlacement.BELOW_PAY_BUTTON] (CONTRACT §20.1). */
+    const val WALLET_BELOW_PAY_GAP_DP = 12
 
     /** Between the divider's text and each of its lines, and the lines' thickness. */
     const val WALLET_DIVIDER_TEXT_GAP_DP = 12
@@ -66,6 +72,12 @@ internal object PaymentViewPlan {
     /** The lock before the secure text, 15×15, drawn in code ([LockGlyph]). */
     const val LOCK_SIZE_DP = 15
 
+    /**
+     * The Pay button's title is one line: a long title is truncated at its end, never wrapped, so Pay grows only with the
+     * font scale, and the wallet button with it (CONTRACT §20.2).
+     */
+    const val BUTTON_TITLE_MAX_LINES = 1
+
     /** The Pay button's spinner and the space around its title. */
     const val SPINNER_SIZE_DP = 20
     const val BUTTON_PADDING_HORIZONTAL_DP = 16
@@ -92,23 +104,54 @@ internal object PaymentViewPlan {
     const val WORDMARK = "Payriff"
 
     /**
-     * The content top to bottom with the space above each part: the wallet button and its divider (only while a wallet
-     * is offered, [showsWallet]; the divider unless the style hides it), the form, the Pay button, the error line (only
-     * while there is one), the badges and the secure line, unless the style hides them. Without a wallet the layout is
-     * exactly CONTRACT §16.14. The footer is laid out apart from it ([footer]).
+     * The content top to bottom with the space above each part (CONTRACT §20.1, `wallet.json` → `viewPlacement`). While
+     * a wallet is offered ([showsWallet]) the wallet button goes where [PayriffPaymentViewStyle.walletPlacement] says:
+     * first, with its divider unless the style hides it, or 12 below the Pay button, where the divider never shows.
+     * Then the form, the Pay button, the error line (only while there is one), the badges and the secure line, unless
+     * the style hides them. Without a wallet the layout is exactly CONTRACT §16.14. The footer is laid out apart from it
+     * ([footer]).
      */
     fun content(style: PayriffPaymentViewStyle, showsError: Boolean, showsWallet: Boolean = false): List<Item> = buildList {
-        if (showsWallet) {
+        val placement = style.walletPlacement.takeIf { showsWallet }
+        if (placement == PayriffWalletPlacement.TOP) {
             add(Item(Part.WALLET_BUTTON, 0))
             if (style.showWalletDivider) add(Item(Part.WALLET_DIVIDER, WALLET_DIVIDER_GAP_DP))
         }
-        add(Item(Part.FORM, if (showsWallet) WALLET_FORM_GAP_DP else 0))
+        add(Item(Part.FORM, if (placement == PayriffWalletPlacement.TOP) WALLET_FORM_GAP_DP else 0))
         add(Item(Part.PAY_BUTTON, BUTTON_GAP_DP))
+        if (placement == PayriffWalletPlacement.BELOW_PAY_BUTTON) add(Item(Part.WALLET_BUTTON, WALLET_BELOW_PAY_GAP_DP))
         if (showsError) add(Item(Part.ERROR, ERROR_GAP_DP))
         if (style.showBadges) add(Item(Part.BADGES, BADGES_GAP_DP))
         if (style.showSecureNote) {
             add(Item(Part.SECURE_NOTE, if (style.showBadges) SECURE_NOTE_GAP_DP else SECURE_NOTE_GAP_WITHOUT_BADGES_DP))
         }
+    }
+
+    /**
+     * Every part of [content] in the order the view keeps its children for [placement]: whichever of them show,
+     * [content] lists them in this order. Below Pay the divider, which never shows there, stays first.
+     */
+    fun parts(placement: PayriffWalletPlacement): List<Part> = when (placement) {
+        PayriffWalletPlacement.TOP ->
+            listOf(Part.WALLET_BUTTON, Part.WALLET_DIVIDER, Part.FORM, Part.PAY_BUTTON, Part.ERROR, Part.BADGES, Part.SECURE_NOTE)
+        PayriffWalletPlacement.BELOW_PAY_BUTTON ->
+            listOf(Part.WALLET_DIVIDER, Part.FORM, Part.PAY_BUTTON, Part.WALLET_BUTTON, Part.ERROR, Part.BADGES, Part.SECURE_NOTE)
+    }
+
+    /**
+     * The wallet button's height in the view, in dp (CONTRACT §20.2, `wallet.json` → `viewWalletHeight`): the wallet
+     * style's [styleHeight], else the Pay button's height as laid out ([payButtonHeight]); at least 40.
+     */
+    fun walletHeight(styleHeight: Float?, payButtonHeight: Float): Float =
+        max(GooglePayButtonStyles.MIN_HEIGHT_DP, CardFormStyles.size(styleHeight ?: payButtonHeight))
+
+    /**
+     * [walletHeight] in pixels at [density], from the Pay button's measured height in pixels: without [styleHeight],
+     * exactly [payButtonHeightPx]; at least 40 dp.
+     */
+    fun walletHeightPx(styleHeight: Float?, payButtonHeightPx: Int, density: Float): Int {
+        val height = if (styleHeight != null) CardFormStyles.px(styleHeight, density) else payButtonHeightPx
+        return max(CardFormStyles.px(GooglePayButtonStyles.MIN_HEIGHT_DP, density), height)
     }
 
     /** The "Powered by Payriff" footer, or `null` when the style hides it. */

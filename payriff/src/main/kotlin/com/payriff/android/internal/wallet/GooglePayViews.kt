@@ -19,10 +19,14 @@ import kotlin.math.roundToInt
 
 /**
  * Google's official Pay button (`com.google.android.gms.wallet.button.PayButton`, CONTRACT §17.10), initialised with
- * [GooglePayButtonOptions], at its height and the full width. Nothing else draws the Google Pay mark. While disabled it
- * shows at 50% opacity and ignores taps.
+ * [GooglePayButtonOptions], at the full width and the options' height. With [followsParentHeight] it takes the height
+ * its parent measures it with instead: the payment view gives it the Pay button's (CONTRACT §20.2). Nothing else draws
+ * the Google Pay mark. While disabled it shows at 50% opacity and ignores taps.
  */
-internal class GooglePayButtonView(context: Context) : FrameLayout(context) {
+internal class GooglePayButtonView @JvmOverloads constructor(
+    context: Context,
+    private val followsParentHeight: Boolean = false,
+) : FrameLayout(context) {
 
     /** Called when the enabled button is tapped. */
     var onTap: (() -> Unit)? = null
@@ -42,10 +46,11 @@ internal class GooglePayButtonView(context: Context) : FrameLayout(context) {
     fun configure(options: GooglePayButtonOptions): Boolean {
         if (options == this.options) return ready
         this.options = options
+        val height = if (followsParentHeight) LayoutParams.MATCH_PARENT else options.heightPx
         val view = button ?: PayButton(context).also { created ->
             created.setOnClickListener { if (isEnabled) onTap?.invoke() }
             button = created
-            addView(created, LayoutParams(LayoutParams.MATCH_PARENT, options.heightPx))
+            addView(created, LayoutParams(LayoutParams.MATCH_PARENT, height))
         }
         ready = try {
             view.initialize(
@@ -63,8 +68,8 @@ internal class GooglePayButtonView(context: Context) : FrameLayout(context) {
             false
         }
         val params = view.layoutParams
-        if (params.height != options.heightPx) {
-            params.height = options.heightPx
+        if (params.height != height) {
+            params.height = height
             view.layoutParams = params
         }
         return ready

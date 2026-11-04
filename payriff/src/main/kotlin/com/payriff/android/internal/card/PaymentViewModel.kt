@@ -13,6 +13,7 @@ import com.payriff.android.internal.wallet.GooglePayTransaction
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancelChildren
 import kotlinx.coroutines.launch
 
 /**
@@ -74,7 +75,10 @@ internal class PaymentViewState {
     var googlePayOffer: GooglePayTransaction? = null
         private set
 
-    /** Whether CONTRACT §17.3 was decided for the loaded order. Until then the Google Pay button does not show. */
+    /**
+     * Whether CONTRACT §17.3 was decided for the loaded order. The view applies the order and the decision together
+     * (§20.3), so the Google Pay button never shows later than the order.
+     */
     var isGooglePayDecided: Boolean = false
         private set
 
@@ -105,10 +109,6 @@ internal class PaymentViewState {
      */
     val isGooglePayEnabled: Boolean
         get() = isGooglePayShown && !isFinished && endedBy == null && !isPaying && !isFormProcessing
-
-    /** Whether Google Pay still has to be decided for the loaded order. */
-    val needsGooglePayDecision: Boolean
-        get() = loadedOrder != null && !isGooglePayDecided
 
     /**
      * Whether Pay can be tapped: the order is payable and not paid from this view yet, every field is valid and no
@@ -236,18 +236,25 @@ internal class PaymentViewState {
 }
 
 /**
- * What [com.payriff.android.PayriffPaymentView] does (CONTRACT §16.14, §17.9), apart from drawing: it loads the order
- * when the view appears and decides Google Pay for it, runs Pay and Google Pay, and reports every payment result, and a
- * fatal load error once, to [deliver]. Pure Kotlin with coroutines; the view passes the main-thread scope,
+ * What [com.payriff.android.PayriffPaymentView] does (CONTRACT §16.14, §17.9, §20.3), apart from drawing: it loads the
+ * order when the view appears and decides Google Pay for it, runs Pay and Google Pay, and reports every payment result,
+ * and a fatal load error once, to [deliver]. Pure Kotlin with coroutines; the view passes the main-thread scope,
  * `Payriff.retrieveOrder`, the Google Pay decision and the launchers, the JVM unit tests a test scope and fakes. Main
  * thread only.
  *
+ * A loaded order is applied together with its Google Pay decision, in one change of [state] (CONTRACT §20.3): at once
+ * when Google Pay cannot take it, else when the decision has the device's answer, at most a second after the order
+ * arrived. A failed load is applied at once.
+ *
  * @param onStateChanged Called after every change of [state], before [deliver].
- * @param decideGooglePay CONTRACT §17.3 for a loaded order ([GooglePayAvailability.decide]): the Google Pay values when
- *   it is offered, else `null`.
+ * @param startGooglePay CONTRACT §17.3 and §20.3, called with the load's scope when a load starts: it may start the
+ *   device check there, alongside the order read ([com.payriff.android.internal.wallet.GooglePayViewDecision]), and
+ *   returns the decision for the order the load reads: the Google Pay values when it is offered, else `null`. What it
+ *   started is cancelled once the order is applied or the load failed, so a later answer is ignored.
  * @param onPaymentStarted CONTRACT §18.5: once per attempt, when Pay or the Google Pay button starts a payment, before
  *   anything is sent or the Google Pay sheet opens.
- * @param onOrderLoaded CONTRACT §18.5: after every successful load of the order, payable by card or not.
+ * @param onOrderLoaded CONTRACT §18.5: after every successful load of the order, payable by card or not, right after
+ *   the order is applied.
  * @param onLoadFailed CONTRACT §18.5: when the view gets no order: every failed load, and a device block once per
  *   order (the order is not loaded then). Called before a fatal error goes to [deliver].
  */
@@ -257,7 +264,7 @@ internal class PaymentViewController(
     private val onStateChanged: () -> Unit,
     private val deliver: (PayriffResult) -> Unit,
     private val deviceBlock: () -> PayriffError? = { null },
-    private val decideGooglePay: suspend (PayriffClientOrder) -> GooglePayTransaction? = { null },
+    private val startGooglePay: (CoroutineScope) -> (suspend (PayriffClientOrder) -> GooglePayTransaction?) = { { null } },
     private val onPaymentStarted: (PayriffPaymentMethod) -> Unit = {},
     private val onOrderLoaded: (PayriffClientOrder) -> Unit = {},
     private val onLoadFailed: (PayriffError) -> Unit = {},
@@ -277,12 +284,19 @@ internal class PaymentViewController(
     /** Bumped for every load and every cancel, so a late answer of an older load is dropped. */
     private var loadGeneration = 0
 
+    /**
+     * The order a load read, until it is applied with its Google Pay decision (CONTRACT §20.3). When the view leaves its
+     * window while the decision waits, the order is decided again the next time the view appears, without another read.
+     */
+    private var arrivedOrder: PayriffClientOrder? = null
+
     /** Sets the order to pay. Another order resets the view, and is loaded at once while the view is on screen. */
     fun setOrder(orderId: String, clientSecret: String) {
         if (orderId == this.orderId && clientSecret == this.clientSecret) return
         this.orderId = orderId
         this.clientSecret = clientSecret
         cancelLoad()
+        arrivedOrder = null
         state.newOrder()
         onStateChanged()
         if (onScreen) load()
@@ -291,8 +305,8 @@ internal class PaymentViewController(
     /**
      * The view is on screen. First the device-integrity check (CONTRACT §16.16, §17.11): a block shows the message, keeps
      * Pay disabled, hides Google Pay, skips the order load and reports the failure once. Otherwise it loads the order
-     * when it needs one ([PaymentViewState.needsOrder]), or decides Google Pay for a loaded order whose decision was
-     * interrupted.
+     * when it needs one ([PaymentViewState.needsOrder]), or decides Google Pay again for an order that arrived while the
+     * view was on screen before, but whose decision was interrupted.
      */
     fun appear() {
         onScreen = true
@@ -310,10 +324,11 @@ internal class PaymentViewController(
         }
         state.deviceDidPass()
         if (loadJob?.isActive == true) return
-        if (state.needsOrder) {
+        val arrived = arrivedOrder
+        if (arrived != null) {
+            decide(arrived, ++loadGeneration)
+        } else if (state.needsOrder) {
             load()
-        } else {
-            state.loadedOrder?.takeIf { state.needsGooglePayDecision }?.let { decide(it, ++loadGeneration) }
         }
     }
 
@@ -398,34 +413,57 @@ internal class PaymentViewController(
         val generation = ++loadGeneration
         state.orderLoading()
         onStateChanged()
-        // The job may finish inside launch (an invalid order id throws before suspending); isActive covers that.
-        loadJob = scope.launch {
+        launchLoad {
+            // CONTRACT §20.3: Google Pay's device check starts with the load, alongside the order read.
+            val decideGooglePay = startGooglePay(this)
             val loaded = try {
                 loadOrder(id, secret)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: PayriffError) {
                 if (generation == loadGeneration) loadFailed(error)
-                return@launch
+                return@launchLoad
             } catch (unexpected: Exception) {
                 if (generation == loadGeneration) loadFailed(PayriffError(PayriffErrorCode.UNKNOWN, LOAD_FAILED_MESSAGE))
-                return@launch
+                return@launchLoad
             }
-            if (generation != loadGeneration) return@launch
-            state.orderDidLoad(loaded)
-            onStateChanged()
-            onOrderLoaded(loaded)
-            if (generation != loadGeneration) return@launch
-            decideGooglePayNow(loaded, generation)
+            if (generation != loadGeneration) return@launchLoad
+            arrivedOrder = loaded
+            decideAndApply(loaded, decideGooglePay, generation)
         }
     }
 
-    /** Decides Google Pay for the loaded [order] (CONTRACT §17.3), in a job of its own. */
+    /**
+     * Decides Google Pay again for [order], which arrived before the view left its window (CONTRACT §20.3): the device
+     * check starts now, then the order and the decision are applied together.
+     */
     private fun decide(order: PayriffClientOrder, generation: Int) {
-        loadJob = scope.launch { decideGooglePayNow(order, generation) }
+        launchLoad { decideAndApply(order, startGooglePay(this), generation) }
     }
 
-    private suspend fun decideGooglePayNow(order: PayriffClientOrder, generation: Int) {
+    /**
+     * Runs [block] as the load job. The job may finish inside launch (an invalid order id throws before suspending);
+     * isActive covers that. What the Google Pay decision started in it, such as the device check, ends with the job.
+     */
+    private fun launchLoad(block: suspend CoroutineScope.() -> Unit) {
+        loadJob = scope.launch {
+            try {
+                block()
+            } finally {
+                coroutineContext.cancelChildren()
+            }
+        }
+    }
+
+    /**
+     * CONTRACT §20.3: decides Google Pay for the [order] that arrived, then applies the order and the decision in one
+     * change of the state, and reports the order.
+     */
+    private suspend fun decideAndApply(
+        order: PayriffClientOrder,
+        decideGooglePay: suspend (PayriffClientOrder) -> GooglePayTransaction?,
+        generation: Int,
+    ) {
         val offer = try {
             decideGooglePay(order)
         } catch (cancelled: CancellationException) {
@@ -434,8 +472,11 @@ internal class PaymentViewController(
             GooglePayAvailability.notOffered("the check failed (${unexpected.javaClass.simpleName})")
         }
         if (generation != loadGeneration) return
+        arrivedOrder = null
+        state.orderDidLoad(order)
         state.googlePayDidDecide(offer)
         onStateChanged()
+        onOrderLoaded(order)
     }
 
     private fun loadFailed(error: PayriffError) {

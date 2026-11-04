@@ -294,7 +294,7 @@ class DesignSystemOptionsTest {
             onStateChanged = {},
             deliver = { log += "result:" + it.javaClass.simpleName },
             deviceBlock = block,
-            decideGooglePay = { offer },
+            startGooglePay = { { offer } },
             onPaymentStarted = { method ->
                 log += "started:$method"
                 onStarted(method)
