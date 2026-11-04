@@ -1,0 +1,158 @@
+{
+  "formatVersion": "1.1",
+  "component": {
+    "group": "com.payriff",
+    "module": "payriff-android",
+    "version": "1.0.0-rc.6",
+    "attributes": {
+      "org.gradle.status": "release"
+    }
+  },
+  "createdBy": {
+    "gradle": {
+      "version": "8.14"
+    }
+  },
+  "variants": [
+    {
+      "name": "releaseVariantReleaseApiPublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-api"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.activity",
+          "module": "activity",
+          "version": {
+            "requires": "1.9.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.0.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "payriff-android-1.0.0-rc.6.aar",
+          "url": "payriff-android-1.0.0-rc.6.aar",
+          "size": 762160,
+          "sha512": "2e0377e7ef1b454ddfd347e300f933bad60e2c4d93dc9b5b143515fe3a7c82ef1a79929ca729a1c1af0481da5dc137f92824a2ed30f52355b099282512007356",
+          "sha256": "b6af827532185ea62e7d2a6ab1a7078d12a38ca0c167d236126fe28bb14b21cb",
+          "sha1": "57248b7b0129f7fd2d298a16d46838eb5d878b96",
+          "md5": "e50922916c6305ee42d1eefb301bc62f"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseRuntimePublication",
+      "attributes": {
+        "org.gradle.category": "library",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.libraryelements": "aar",
+        "org.gradle.usage": "java-runtime"
+      },
+      "dependencies": [
+        {
+          "group": "androidx.core",
+          "module": "core-ktx",
+          "version": {
+            "requires": "1.13.1"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlinx",
+          "module": "kotlinx-coroutines-android",
+          "version": {
+            "requires": "1.9.0"
+          }
+        },
+        {
+          "group": "com.google.android.gms",
+          "module": "play-services-wallet",
+          "version": {
+            "requires": "19.5.0"
+          }
+        },
+        {
+          "group": "androidx.fragment",
+          "module": "fragment",
+          "version": {
+            "requires": "1.3.6"
+          }
+        },
+        {
+          "group": "androidx.activity",
+          "module": "activity",
+          "version": {
+            "requires": "1.9.3"
+          }
+        },
+        {
+          "group": "org.jetbrains.kotlin",
+          "module": "kotlin-stdlib",
+          "version": {
+            "requires": "2.0.21"
+          }
+        }
+      ],
+      "files": [
+        {
+          "name": "payriff-android-1.0.0-rc.6.aar",
+          "url": "payriff-android-1.0.0-rc.6.aar",
+          "size": 762160,
+          "sha512": "2e0377e7ef1b454ddfd347e300f933bad60e2c4d93dc9b5b143515fe3a7c82ef1a79929ca729a1c1af0481da5dc137f92824a2ed30f52355b099282512007356",
+          "sha256": "b6af827532185ea62e7d2a6ab1a7078d12a38ca0c167d236126fe28bb14b21cb",
+          "sha1": "57248b7b0129f7fd2d298a16d46838eb5d878b96",
+          "md5": "e50922916c6305ee42d1eefb301bc62f"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseSourcePublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "sources",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "payriff-android-1.0.0-rc.6-sources.jar",
+          "url": "payriff-android-1.0.0-rc.6-sources.jar",
+          "size": 201497,
+          "sha512": "d849ac6e871d71c569569889ed6db4d4fadb68bc3c06c186a3c5986eacef8e02f3c898f32d86fe60c202984fcfcec3dcbb8d4dbe2ae42c57fc63cfb39c827517",
+          "sha256": "dede0b944e40764dc8fd2b30a8ef480a661d021a492ba34d518b7819826a9387",
+          "sha1": "d9f24aa653b0ea6fed8fe66aac68c12889c53955",
+          "md5": "f54692de5914679339006057f198d30e"
+        }
+      ]
+    },
+    {
+      "name": "releaseVariantReleaseJavaDocPublication",
+      "attributes": {
+        "org.gradle.category": "documentation",
+        "org.gradle.dependency.bundling": "external",
+        "org.gradle.docstype": "javadoc",
+        "org.gradle.usage": "java-runtime"
+      },
+      "files": [
+        {
+          "name": "payriff-android-1.0.0-rc.6-javadoc.jar",
+          "url": "payriff-android-1.0.0-rc.6-javadoc.jar",
+          "size": 606082,
+          "sha512": "d85f03f0c7877c40f07db21d6b687345c4b7503abe5b3cbe1ccb580c47ac7484c00bc11f7c4dd1597492c926c2f61691aab7ac58b899e9ce8d675cb4e567e1b8",
+          "sha256": "457d427461b5b1b2a4777fba56da943b59e89d07ab61882a2884694def2067a8",
+          "sha1": "dbef094d1cce826fee98da520ae9a0129461a66e",
+          "md5": "3414f153a2d45992714ab8c0fa3c3df6"
+        }
+      ]
+    }
+  ]
+}
